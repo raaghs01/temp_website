@@ -53,6 +53,7 @@ class User(BaseModel):
     password_hash: str
     name: str
     college: str
+    role: str = "ambassador"  # "ambassador" or "admin"
     current_day: int = 0
     total_points: int = 0
     total_referrals: int = 0
@@ -65,10 +66,12 @@ class UserCreate(BaseModel):
     password: str
     name: str
     college: str
+    role: str = "ambassador"
 
 class UserLogin(BaseModel):
     email: str
     password: str
+    role: str = "ambassador"
 
 class Task(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -101,6 +104,7 @@ class UserProfile(BaseModel):
     email: str
     name: str
     college: str
+    role: str
     current_day: int
     total_points: int
     total_referrals: int
@@ -229,7 +233,8 @@ async def register(user_data: UserCreate):
         email=user_data.email,
         password_hash=hash_password(user_data.password),
         name=user_data.name,
-        college=user_data.college
+        college=user_data.college,
+        role=user_data.role
     )
     
     await db.users.insert_one(user.dict())
@@ -248,6 +253,7 @@ async def register(user_data: UserCreate):
             email=user.email,
             name=user.name,
             college=user.college,
+            role=user.role,
             current_day=user.current_day,
             total_points=user.total_points,
             total_referrals=user.total_referrals,
@@ -269,6 +275,10 @@ async def login(login_data: UserLogin):
     if not verify_password(login_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
+    # Verify role matches
+    if user.role != login_data.role:
+        raise HTTPException(status_code=401, detail="Invalid role for this account")
+    
     # Create access token
     token = create_access_token(user.id)
     
@@ -283,6 +293,7 @@ async def login(login_data: UserLogin):
             email=user.email,
             name=user.name,
             college=user.college,
+            role=user.role,
             current_day=user.current_day,
             total_points=user.total_points,
             total_referrals=user.total_referrals,
@@ -299,6 +310,7 @@ async def get_profile(current_user: User = Depends(get_current_user)):
         email=current_user.email,
         name=current_user.name,
         college=current_user.college,
+        role=current_user.role,
         current_day=current_user.current_day,
         total_points=current_user.total_points,
         total_referrals=current_user.total_referrals,
@@ -563,6 +575,91 @@ async def get_leaderboard(limit: int = 10, current_user: User = Depends(get_curr
         ))
     
     return leaderboard
+
+# Admin endpoints
+@api_router.get("/admin/stats")
+async def get_admin_stats(current_user: User = Depends(get_current_user)):
+    # Check if user is admin
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied. Admin role required.")
+    
+    # Get all users
+    all_users = await db.users.find({"is_active": True}).to_list(1000)
+    
+    # Calculate stats
+    total_ambassadors = len([u for u in all_users if u.get("role") == "ambassador"])
+    active_ambassadors = len([u for u in all_users if u.get("role") == "ambassador" and u.get("is_active", True)])
+    
+    # Calculate total revenue (simplified - could be enhanced with actual revenue tracking)
+    total_revenue = sum(u.get("total_points", 0) * 0.1 for u in all_users if u.get("role") == "ambassador")
+    
+    # Get total events (simplified - could be enhanced with actual event tracking)
+    total_events = len([u for u in all_users if u.get("role") == "ambassador" and u.get("total_points", 0) > 0])
+    
+    # Calculate total students reached
+    total_students_reached = sum(u.get("total_referrals", 0) for u in all_users if u.get("role") == "ambassador")
+    
+    # Calculate average engagement rate
+    engagement_rates = [u.get("total_points", 0) / max(u.get("current_day", 1), 1) for u in all_users if u.get("role") == "ambassador"]
+    average_engagement_rate = sum(engagement_rates) / len(engagement_rates) if engagement_rates else 0
+    
+    # Find top performing college
+    college_stats = {}
+    for user in all_users:
+        if user.get("role") == "ambassador":
+            college = user.get("college", "Unknown")
+            if college not in college_stats:
+                college_stats[college] = 0
+            college_stats[college] += user.get("total_points", 0)
+    
+    top_performing_college = max(college_stats.items(), key=lambda x: x[1])[0] if college_stats else "None"
+    
+    # Calculate monthly growth (simplified)
+    monthly_growth = 15.5  # Placeholder value
+    
+    return {
+        "total_ambassadors": total_ambassadors,
+        "active_ambassadors": active_ambassadors,
+        "total_revenue": round(total_revenue, 2),
+        "total_events": total_events,
+        "total_students_reached": total_students_reached,
+        "average_engagement_rate": round(average_engagement_rate, 2),
+        "top_performing_college": top_performing_college,
+        "monthly_growth": monthly_growth
+    }
+
+@api_router.get("/admin/ambassadors")
+async def get_ambassadors(current_user: User = Depends(get_current_user)):
+    # Check if user is admin
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied. Admin role required.")
+    
+    # Get all ambassador users
+    ambassadors = await db.users.find({"role": "ambassador", "is_active": True}).to_list(1000)
+    
+    return [
+        {
+            "id": ambassador["id"],
+            "name": ambassador["name"],
+            "email": ambassador["email"],
+            "college": ambassador["college"],
+            "total_points": ambassador.get("total_points", 0),
+            "rank_position": ambassador.get("rank_position"),
+            "current_day": ambassador.get("current_day", 0),
+            "total_referrals": ambassador.get("total_referrals", 0),
+            "events_hosted": int(ambassador.get("total_points", 0) / 50),  # Simplified calculation
+            "students_reached": ambassador.get("total_referrals", 0),
+            "revenue_generated": ambassador.get("total_points", 0) * 0.1,  # Simplified calculation
+            "social_media_posts": int(ambassador.get("total_points", 0) / 10),  # Simplified calculation
+            "engagement_rate": ambassador.get("total_points", 0) / max(ambassador.get("current_day", 1), 1),
+            "followers_growth": ambassador.get("total_referrals", 0) * 2,  # Simplified calculation
+            "campaign_days": ambassador.get("current_day", 0),
+            "status": "active" if ambassador.get("is_active", True) else "inactive",
+            "last_activity": ambassador.get("registration_date", datetime.utcnow()).isoformat(),
+            "join_date": ambassador.get("registration_date", datetime.utcnow()).isoformat()
+        }
+        for ambassador in ambassadors
+    ]
 
 # Initialize tasks on startup
 @app.on_event("startup")
