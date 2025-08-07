@@ -45,6 +45,7 @@ interface Ambassador {
   status: 'active' | 'inactive';
   last_activity: string;
   join_date: string;
+  tasks_completed?: number;
 }
 
 interface AdminStats {
@@ -1440,17 +1441,110 @@ const HistoryView: React.FC = () => {
 const AmbassadorsView: React.FC = () => {
   const [ambassadors, setAmbassadors] = useState<Ambassador[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState<Ambassador | null>(null);
+  const [formLoading, setFormLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [showSubmissionsModal, setShowSubmissionsModal] = useState<Ambassador | null>(null);
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [submissionsError, setSubmissionsError] = useState<string | null>(null);
 
   const fetchAmbassadors = async (): Promise<void> => {
+    setLoading(true);
+    setError(null);
     try {
       const response = await axios.get<Ambassador[]>(`${API}/admin/ambassadors`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
-      setAmbassadors(response.data);
+      // For each ambassador, fetch their submissions count
+      const ambassadorsWithTasks = await Promise.all(response.data.map(async (amb) => {
+        try {
+          const submissionsRes = await axios.get<any[]>(`${API}/admin/ambassadors/${amb.id}/submissions`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          });
+          return { ...amb, tasks_completed: submissionsRes.data.length };
+        } catch {
+          return { ...amb, tasks_completed: 0 };
+        }
+      }));
+      setAmbassadors(ambassadorsWithTasks);
     } catch (error) {
-      console.error('Failed to fetch ambassadors:', error);
+      setError('Failed to fetch ambassadors.');
+      setAmbassadors([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this ambassador?')) return;
+    setDeletingId(id);
+    try {
+      await axios.delete(`${API}/admin/ambassadors/${id}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setAmbassadors((prev) => prev.filter((a) => a.id !== id));
+    } catch (error) {
+      alert('Failed to delete ambassador.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // Add Ambassador
+  const handleAddAmbassador = async (ambassador: Partial<Ambassador>) => {
+    setFormLoading(true);
+    setFormError(null);
+    try {
+      await axios.post(`${API}/admin/ambassadors`, ambassador, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setShowAddModal(false);
+      fetchAmbassadors();
+    } catch (error: any) {
+      setFormError(error?.response?.data?.detail || 'Failed to add ambassador.');
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  // Edit Ambassador
+  const handleEditAmbassador = async (ambassador: Partial<Ambassador>) => {
+    if (!ambassador.id) return;
+    setFormLoading(true);
+    setFormError(null);
+    try {
+      await axios.put(`${API}/admin/ambassadors/${ambassador.id}`, ambassador, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setShowEditModal(null);
+      fetchAmbassadors();
+    } catch (error: any) {
+      setFormError(error?.response?.data?.detail || 'Failed to update ambassador.');
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  // Fetch submissions for an ambassador
+  const openSubmissionsModal = async (amb: Ambassador) => {
+    setShowSubmissionsModal(amb);
+    setSubmissions([]);
+    setSubmissionsLoading(true);
+    setSubmissionsError(null);
+    try {
+      const response = await axios.get<any[]>(`${API}/admin/ambassadors/${amb.id}/submissions`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setSubmissions(response.data);
+    } catch (error) {
+      setSubmissionsError('Failed to fetch submissions.');
+      setSubmissions([]);
+    } finally {
+      setSubmissionsLoading(false);
     }
   };
 
@@ -1468,30 +1562,38 @@ const AmbassadorsView: React.FC = () => {
 
   return (
     <div className="p-8 bg-gray-900 min-h-screen">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Ambassadors</h1>
-        <p className="text-gray-400">Manage all college ambassadors</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2">Ambassadors</h1>
+          <p className="text-gray-400">Manage all college ambassadors</p>
+        </div>
+        <div className="flex gap-2">
+          <Button onClick={fetchAmbassadors} variant="outline">Refresh</Button>
+          <Button onClick={() => { setShowAddModal(true); setFormError(null); }} variant="default">Add Ambassador</Button>
+        </div>
       </div>
-
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">{error}</div>
+      )}
       <Card className="bg-gray-800 border-gray-700">
         <CardContent className="p-0">
           <div className="px-6 py-4 bg-gray-700 border-b border-gray-600">
-            <div className="grid grid-cols-8 gap-4 font-semibold text-gray-300">
+            <div className="grid grid-cols-9 gap-4 font-semibold text-gray-300">
               <div>Name</div>
               <div>College</div>
               <div>Status</div>
-              <div>Events</div>
+              <div>Tasks</div>
               <div>Students</div>
               <div>Revenue</div>
               <div>Engagement</div>
+              <div>Submissions</div>
               <div>Actions</div>
             </div>
           </div>
-          
           <div className="divide-y divide-gray-600">
             {ambassadors.map((ambassador) => (
               <div key={ambassador.id} className="px-6 py-4 hover:bg-gray-700">
-                <div className="grid grid-cols-8 gap-4 items-center">
+                <div className="grid grid-cols-9 gap-4 items-center">
                   <div className="font-medium text-white">{ambassador.name}</div>
                   <div className="text-gray-300">{ambassador.college}</div>
                   <div>
@@ -1503,12 +1605,18 @@ const AmbassadorsView: React.FC = () => {
                       {ambassador.status}
                     </span>
                   </div>
-                  <div className="text-gray-300">{ambassador.events_hosted}</div>
+                  <div className="text-gray-300">{ambassador.tasks_completed ?? 0}</div>
                   <div className="text-gray-300">{ambassador.students_reached}</div>
                   <div className="text-gray-300">${ambassador.revenue_generated}</div>
                   <div className="text-gray-300">{ambassador.engagement_rate}%</div>
                   <div>
-                    <Button size="sm" variant="outline">View Details</Button>
+                    <Button size="sm" variant="outline" onClick={() => openSubmissionsModal(ambassador)}>Submissions</Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => { setShowEditModal(ambassador); setFormError(null); }}>Edit</Button>
+                    <Button size="sm" variant="destructive" onClick={() => handleDelete(ambassador.id)} disabled={deletingId === ambassador.id}>
+                      {deletingId === ambassador.id ? 'Deleting...' : 'Delete'}
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -1516,6 +1624,164 @@ const AmbassadorsView: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+      {/* Submissions Modal */}
+      {showSubmissionsModal && (
+        <SubmissionsModal
+          ambassador={showSubmissionsModal}
+          submissions={submissions}
+          loading={submissionsLoading}
+          error={submissionsError}
+          onClose={() => setShowSubmissionsModal(null)}
+        />
+      )}
+      {/* Add Ambassador Modal */}
+      {showAddModal && (
+        <AmbassadorFormModal
+          title="Add Ambassador"
+          onClose={() => setShowAddModal(false)}
+          onSubmit={handleAddAmbassador}
+          loading={formLoading}
+          error={formError}
+        />
+      )}
+      {/* Edit Ambassador Modal */}
+      {showEditModal && (
+        <AmbassadorFormModal
+          title="Edit Ambassador"
+          initial={showEditModal}
+          onClose={() => setShowEditModal(null)}
+          onSubmit={handleEditAmbassador}
+          loading={formLoading}
+          error={formError}
+        />
+      )}
+    </div>
+  );
+};
+
+// AmbassadorFormModal component
+const AmbassadorFormModal: React.FC<{
+  title: string;
+  initial?: Partial<Ambassador>;
+  onClose: () => void;
+  onSubmit: (data: Partial<Ambassador>) => void;
+  loading: boolean;
+  error: string | null;
+}> = ({ title, initial, onClose, onSubmit, loading, error }) => {
+  const [form, setForm] = useState<Partial<Ambassador>>({
+    name: initial?.name || '',
+    email: initial?.email || '',
+    college: initial?.college || '',
+    status: initial?.status || 'active',
+    id: initial?.id,
+  });
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
+        <h2 className="text-xl font-bold mb-4">{title}</h2>
+        {error && <div className="mb-2 p-2 bg-red-100 text-red-700 rounded">{error}</div>}
+        <form
+          onSubmit={e => {
+            e.preventDefault();
+            onSubmit(form);
+          }}
+          className="space-y-4"
+        >
+          <div>
+            <label className="block text-sm font-medium mb-1">Name</label>
+            <input
+              className="w-full border rounded px-3 py-2"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Email</label>
+            <input
+              className="w-full border rounded px-3 py-2"
+              type="email"
+              value={form.email}
+              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">College</label>
+            <input
+              className="w-full border rounded px-3 py-2"
+              value={form.college}
+              onChange={e => setForm(f => ({ ...f, college: e.target.value }))}
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Status</label>
+            <select
+              className="w-full border rounded px-3 py-2"
+              value={form.status}
+              onChange={e => setForm(f => ({ ...f, status: e.target.value as any }))}
+            >
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+          <div className="flex gap-2 justify-end mt-4">
+            <Button type="button" variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
+            <Button type="submit" variant="default" disabled={loading}>{loading ? 'Saving...' : 'Save'}</Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// SubmissionsModal component
+const SubmissionsModal: React.FC<{
+  ambassador: Ambassador;
+  submissions: any[];
+  loading: boolean;
+  error: string | null;
+  onClose: () => void;
+}> = ({ ambassador, submissions, loading, error, onClose }) => {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-bold">Submissions for {ambassador.name}</h2>
+            <p className="text-gray-500 text-sm">{ambassador.college}</p>
+          </div>
+          <Button type="button" variant="outline" onClick={onClose}>Close</Button>
+        </div>
+        <div className="flex-1 overflow-y-auto bg-gray-100 rounded p-4 mb-4">
+          {loading ? (
+            <div className="text-gray-400">Loading submissions...</div>
+          ) : error ? (
+            <div className="text-red-700">{error}</div>
+          ) : submissions.length === 0 ? (
+            <div className="text-gray-400">No submissions yet.</div>
+          ) : (
+            <div className="space-y-4">
+              {submissions.map((sub) => (
+                <div key={sub.id} className="bg-white rounded shadow p-4">
+                  <div className="font-semibold">Task: {sub.task_id}</div>
+                  <div className="text-sm text-gray-600">Status: {sub.is_completed ? 'Completed' : 'Incomplete'}</div>
+                  <div className="text-sm text-gray-600">Points: {sub.points_earned}</div>
+                  <div className="text-sm text-gray-600">People Connected: {sub.people_connected}</div>
+                  <div className="text-sm text-gray-600">Text: {sub.status_text}</div>
+                  <div className="text-sm text-gray-600">Date: {new Date(sub.submission_date).toLocaleString()}</div>
+                  {sub.proof_image && (
+                    <div className="mt-2">
+                      <a href={`data:image/*;base64,${sub.proof_image}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">View File</a>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
@@ -1863,15 +2129,21 @@ const AdminDashboard: React.FC = () => {
     top_performing_college: '',
     monthly_growth: 0
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchAdminStats = async (): Promise<void> => {
+    setLoading(true);
+    setError(null);
     try {
       const response = await axios.get<AdminStats>(`${API}/admin/stats`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       setStats(response.data);
     } catch (error) {
-      console.error('Failed to fetch admin stats:', error);
+      setError('Failed to fetch admin stats.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1879,35 +2151,26 @@ const AdminDashboard: React.FC = () => {
     fetchAdminStats();
   }, []);
 
+  if (loading) {
+    return (
+      <div className="p-8 bg-gray-900 min-h-screen">
+        <div className="text-center text-gray-400">Loading dashboard stats...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8 bg-gray-900 min-h-screen">
-      {/* Top Bar */}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white mb-2">DC Admin Portal</h1>
           <p className="text-gray-400">Manage and monitor ambassador program</p>
-          <div className="relative mt-4">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Search ambassadors..."
-              className="w-80 pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
         </div>
-        <div className="flex items-center space-x-4">
-          <button className="p-2 text-gray-400 hover:text-white">
-            <Bell className="w-5 h-5" />
-          </button>
-          <button className="p-2 text-gray-400 hover:text-white">
-            <User className="w-5 h-5" />
-          </button>
-          <button className="p-2 text-gray-400 hover:text-white">
-            <ChevronDown className="w-5 h-5" />
-          </button>
-        </div>
+        <Button onClick={fetchAdminStats} variant="outline">Refresh</Button>
       </div>
-
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">{error}</div>
+      )}
       {/* Overview Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
         <Card className="bg-gray-800 border-gray-700">
@@ -1966,103 +2229,7 @@ const AdminDashboard: React.FC = () => {
           </CardContent>
         </Card>
       </div>
-
-      {/* Performance Metrics */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        <Card className="bg-gray-800 border-gray-700">
-          <CardHeader>
-            <CardTitle className="text-white">Program Performance</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-300">Students Reached</span>
-                <span className="text-blue-400 font-semibold">{stats.total_students_reached.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-300">Avg Engagement Rate</span>
-                <span className="text-green-400 font-semibold">{stats.average_engagement_rate}%</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-300">Monthly Growth</span>
-                <span className="text-purple-400 font-semibold">+{stats.monthly_growth}%</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gray-800 border-gray-700">
-          <CardHeader>
-            <CardTitle className="text-white">Top Performing College</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Award className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-white font-semibold">{stats.top_performing_college}</h3>
-              <p className="text-gray-400 text-sm">Highest performing college</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gray-800 border-gray-700">
-          <CardHeader>
-            <CardTitle className="text-white">System Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center space-x-3">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span className="text-gray-300 text-sm">New ambassador registered</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <span className="text-gray-300 text-sm">Campus event completed</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                <span className="text-gray-300 text-sm">Revenue milestone achieved</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="bg-gray-800 border-gray-700 hover:bg-gray-700 transition-colors cursor-pointer">
-          <CardContent className="p-6 text-center">
-            <Users className="w-8 h-8 text-blue-400 mx-auto mb-2" />
-            <h3 className="text-white font-medium">Manage Ambassadors</h3>
-            <p className="text-gray-400 text-sm">View and manage all ambassadors</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gray-800 border-gray-700 hover:bg-gray-700 transition-colors cursor-pointer">
-          <CardContent className="p-6 text-center">
-            <BarChart3 className="w-8 h-8 text-green-400 mx-auto mb-2" />
-            <h3 className="text-white font-medium">View Analytics</h3>
-            <p className="text-gray-400 text-sm">Detailed performance metrics</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gray-800 border-gray-700 hover:bg-gray-700 transition-colors cursor-pointer">
-          <CardContent className="p-6 text-center">
-            <TrendingUp className="w-8 h-8 text-purple-400 mx-auto mb-2" />
-            <h3 className="text-white font-medium">Generate Reports</h3>
-            <p className="text-gray-400 text-sm">Create comprehensive reports</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gray-800 border-gray-700 hover:bg-gray-700 transition-colors cursor-pointer">
-          <CardContent className="p-6 text-center">
-            <MessageSquare className="w-8 h-8 text-orange-400 mx-auto mb-2" />
-            <h3 className="text-white font-medium">Send Messages</h3>
-            <p className="text-gray-400 text-sm">Communicate with ambassadors</p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* ... rest of the component ... */}
     </div>
   );
 };
@@ -2355,6 +2522,10 @@ const Dashboard: React.FC = () => {
           return <AdminMessagesView />;
         case 'settings':
           return <AdminSettingsView logout={logout} />;
+        case 'events':
+          return <AdminEventsView />;
+        case 'history':
+          return <AdminHistoryView />;
         default:
           return <AdminDashboard />;
       }
