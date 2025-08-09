@@ -34,6 +34,29 @@
   @apply bg-blue-50 border-r-4 border-blue-600 text-blue-600;
 }
 
+/* Layout fixes to ensure sidebar and content are flush */
+.dashboard-layout {
+  @apply flex bg-gray-900 min-h-screen;
+}
+
+.sidebar-container {
+  @apply w-64 bg-gray-900 text-white h-screen flex flex-col fixed left-0 top-0 z-50;
+}
+
+.main-content-container {
+  @apply flex-1 ml-64 overflow-y-auto h-screen;
+}
+
+/* Ensure proper scrolling behavior */
+.main-content-container > div {
+  @apply min-h-full;
+}
+
+/* Prevent body scroll when sidebar is fixed */
+body {
+  @apply overflow-x-hidden;
+}
+
 /* Card styles */
 .stats-card {
   @apply bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow;
@@ -213,15 +236,15 @@
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-  .sidebar {
-    @apply transform -translate-x-full;
+  .sidebar-container {
+    @apply transform -translate-x-full transition-transform duration-300;
   }
   
-  .sidebar.open {
+  .sidebar-container.open {
     @apply translate-x-0;
   }
   
-  .main-content {
+  .main-content-container {
     @apply ml-0;
   }
   

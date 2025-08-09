@@ -9,7 +9,11 @@ import requests
 import json
 import base64
 import io
-from PIL import Image
+try:
+    from PIL import Image
+except ImportError:
+    print("Pillow not installed. Install with: pip install Pillow")
+    sys.exit(1)
 import time
 import sys
 import os
