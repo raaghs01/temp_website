@@ -76,6 +76,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user, logout
             <p className="text-xs text-gray-400 truncate">
               {user?.college || 'College'}
             </p>
+            
           </div>
         </div>
       </div>

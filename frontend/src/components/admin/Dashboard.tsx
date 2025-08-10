@@ -247,7 +247,6 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
       <div className="flex items-center justify-between p-6 border-b border-gray-800">
         <div className="flex items-center space-x-4">
           <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-          <span className="px-3 py-1 bg-purple-600 text-white text-sm rounded-full">DS Team</span>
         </div>
         
         <div className="flex items-center space-x-4">
@@ -262,10 +261,6 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
               </span>
             )}
           </button>
-          <Button size="sm" className="bg-purple-600 hover:bg-purple-700">
-            <Settings className="h-4 w-4 mr-2" />
-            System Settings
-          </Button>
         </div>
       </div>
 
@@ -278,7 +273,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
         </div>
 
         {/* System Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <Card className="bg-gray-800 border-gray-700 hover:bg-gray-750 transition-colors">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -319,21 +314,6 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                 </div>
                 <div className="w-12 h-12 bg-yellow-600 rounded-lg flex items-center justify-center">
                   <Award className="h-6 w-6 text-white" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gray-800 border-gray-700 hover:bg-gray-750 transition-colors">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-400 text-sm font-medium">System Health</p>
-                  <p className="text-2xl font-bold text-white mt-1">{dashboardStats?.system_health || 0}%</p>
-                  <p className="text-green-400 text-xs mt-1">All systems operational</p>
-                </div>
-                <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
-                  <Activity className="h-6 w-6 text-white" />
                 </div>
               </div>
             </CardContent>
@@ -414,11 +394,8 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                 <thead>
                   <tr className="border-b border-gray-700">
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Ambassador</th>
-                    <th className="text-left py-3 px-4 text-gray-300 font-medium">College</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Status</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Tasks</th>
-                    <th className="text-left py-3 px-4 text-gray-300 font-medium">Points</th>
-                    <th className="text-left py-3 px-4 text-gray-300 font-medium">Rank</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Actions</th>
                   </tr>
                 </thead>
@@ -436,15 +413,12 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-gray-300">{ambassador.college}</td>
                       <td className="py-3 px-4">
                         <span className={`capitalize ${getStatusColor(ambassador.status)}`}>
                           {ambassador.status}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-gray-300">{ambassador.tasks_completed}</td>
-                      <td className="py-3 px-4 text-gray-300">{ambassador.total_points.toLocaleString()}</td>
-                      <td className="py-3 px-4 text-gray-300">#{ambassador.rank}</td>
                       <td className="py-3 px-4">
                         <div className="flex items-center space-x-2">
                           <button
@@ -452,12 +426,6 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                             className="p-1 text-blue-400 hover:text-blue-300"
                           >
                             <Eye className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleAmbassadorAction(ambassador, 'message')}
-                            className="p-1 text-green-400 hover:text-green-300"
-                          >
-                            <Send className="h-4 w-4" />
                           </button>
                           {ambassador.status === 'active' ? (
                             <button
@@ -480,47 +448,6 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                   ))}
                 </tbody>
               </table>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Recent Task Assignments */}
-        <Card className="bg-gray-800 border-gray-700">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-white">Recent Task Assignments</CardTitle>
-                <CardDescription className="text-gray-400">Monitor task completion across the network</CardDescription>
-              </div>
-              <Button className="bg-purple-600 hover:bg-purple-700">
-                <Calendar className="h-4 w-4 mr-2" />
-                Create Task
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentTasks.map((task) => (
-                <div key={task.id} className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
-                  <div className="flex-1">
-                    <h4 className="text-white font-medium">{task.title}</h4>
-                    <div className="flex items-center space-x-4 mt-2 text-sm text-gray-400">
-                      <span>Assigned: {task.assigned_to}</span>
-                      <span>Completed: {task.completed_by}</span>
-                      <span>Deadline: {task.deadline}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
-                      {task.priority}
-                    </span>
-                    <div className="text-right">
-                      <p className="text-white font-medium">{Math.round((task.completed_by / task.assigned_to) * 100)}%</p>
-                      <p className="text-gray-400 text-sm">completion</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
             </div>
           </CardContent>
         </Card>

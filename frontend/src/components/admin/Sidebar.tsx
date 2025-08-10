@@ -13,11 +13,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user, logout
     { id: 'dashboard', label: 'Dashboard', icon: '🏠' },
     { id: 'ambassadors', label: 'Ambassadors', icon: '👥' },
     { id: 'leaderboard', label: 'Leaderboard', icon: '🏆' },
-    { id: 'analytics', label: 'Analytics', icon: '📊' },
+    // { id: 'analytics', label: 'Analytics', icon: '📊' },
     { id: 'reports', label: 'Reports', icon: '📈' },
-    { id: 'messages', label: 'Messages', icon: '💬' },
+    // { id: 'messages', label: 'Messages', icon: '💬' },
     { id: 'events', label: 'Events', icon: '📅' },
-    { id: 'history', label: 'Activity Log', icon: '⏰' },
+    // { id: 'history', label: 'Activity Log', icon: '⏰' },
     { id: 'profile', label: 'Profile', icon: '👤' },
     { id: 'settings', label: 'Settings', icon: '⚙️' },
   ];
@@ -29,7 +29,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user, logout
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold">DC Studios</h1>
-            <p className="text-sm text-gray-400">DS Team Admin</p>
+            <p className="text-sm text-gray-400">DC Team Admin</p>
           </div>
           <div className="flex space-x-1">
             <div className="w-3 h-3 bg-red-500 rounded-full"></div>
@@ -61,7 +61,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user, logout
       </nav>
 
       {/* Admin Badge */}
-      <div className="px-4 pb-2">
+      {/* <div className="px-4 pb-2">
         <div className="bg-purple-600/20 border border-purple-500/30 rounded-lg p-3">
           <div className="flex items-center space-x-2 mb-2">
             <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
@@ -71,7 +71,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user, logout
             Full system access enabled
           </p>
         </div>
-      </div>
+      </div> */}
 
       {/* User Profile Section */}
       <div className="p-4 border-t border-gray-800">

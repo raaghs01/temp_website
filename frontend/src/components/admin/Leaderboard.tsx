@@ -246,7 +246,6 @@ const Leaderboard: React.FC = () => {
       <div className="flex items-center justify-between p-6 border-b border-gray-800">
         <div className="flex items-center space-x-4">
           <h1 className="text-2xl font-bold">Ambassador Leaderboard</h1>
-          <span className="px-3 py-1 bg-purple-600 text-white text-sm rounded-full">Admin Control</span>
         </div>
         
         <div className="flex items-center space-x-4">
@@ -265,10 +264,6 @@ const Leaderboard: React.FC = () => {
               </button>
             ))}
           </div>
-          <Button className="bg-blue-600 hover:bg-blue-700">
-            <Download className="h-4 w-4 mr-2" />
-            Export Data
-          </Button>
         </div>
       </div>
 
@@ -384,10 +379,6 @@ const Leaderboard: React.FC = () => {
                   <tr className="border-b border-gray-700">
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Rank</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Ambassador</th>
-                    <th className="text-left py-3 px-4 text-gray-300 font-medium">College</th>
-                    <th className="text-left py-3 px-4 text-gray-300 font-medium">Points</th>
-                    <th className="text-left py-3 px-4 text-gray-300 font-medium">Tasks</th>
-                    <th className="text-left py-3 px-4 text-gray-300 font-medium">Referrals</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Status</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Trend</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Actions</th>
@@ -418,12 +409,6 @@ const Leaderboard: React.FC = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4 text-gray-300">{ambassador.college}</td>
-                      <td className="py-3 px-4">
-                        <span className="text-white font-bold">{ambassador.points.toLocaleString()}</span>
-                      </td>
-                      <td className="py-3 px-4 text-gray-300">{ambassador.tasks_completed}</td>
-                      <td className="py-3 px-4 text-gray-300">{ambassador.people_referred}</td>
                       <td className="py-3 px-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(ambassador.status)}`}>
                           {ambassador.status}
@@ -447,12 +432,6 @@ const Leaderboard: React.FC = () => {
                             className="p-1 text-blue-400 hover:text-blue-300"
                           >
                             <Eye className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleAmbassadorAction(ambassador, 'message')}
-                            className="p-1 text-green-400 hover:text-green-300"
-                          >
-                            <Send className="h-4 w-4" />
                           </button>
                           {ambassador.status === 'active' ? (
                             <button

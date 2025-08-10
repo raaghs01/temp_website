@@ -211,7 +211,6 @@ const Profile: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ us
       <div className="flex items-center justify-between p-6 border-b border-gray-800">
         <div className="flex items-center space-x-4">
           <h1 className="text-2xl font-bold">Admin Profile</h1>
-          <span className="px-3 py-1 bg-purple-600 text-white text-sm rounded-full">System Administrator</span>
         </div>
         
         <div className="flex items-center space-x-4">
@@ -345,31 +344,6 @@ const Profile: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ us
                 </div>
               </CardContent>
             </Card>
-
-            {/* Permissions */}
-            <Card className="bg-gray-800 border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center">
-                  <Shield className="h-5 w-5 mr-2" />
-                  Permissions & Access
-                </CardTitle>
-                <CardDescription className="text-gray-400">
-                  Your current system permissions and access levels
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {profile?.permissions.map((permission) => (
-                    <div key={permission} className="flex items-center space-x-3 p-3 bg-gray-700 rounded-lg">
-                      <div className="text-green-400">
-                        {getPermissionIcon(permission)}
-                      </div>
-                      <span className="text-white">{getPermissionLabel(permission)}</span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
           </div>
 
           {/* Sidebar */}
@@ -397,37 +371,6 @@ const Profile: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ us
                   <p className="text-2xl font-bold text-yellow-400">{stats?.uptime_maintained}%</p>
                   <p className="text-gray-400 text-sm">Uptime Maintained</p>
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Notification Settings */}
-            <Card className="bg-gray-800 border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center">
-                  <Bell className="h-5 w-5 mr-2" />
-                  Notification Preferences
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {[
-                  { key: 'email_notifications', label: 'Email Notifications' },
-                  { key: 'security_alerts', label: 'Security Alerts' },
-                  { key: 'weekly_reports', label: 'Weekly Reports' },
-                  { key: 'system_updates', label: 'System Updates' }
-                ].map((setting) => (
-                  <div key={setting.key} className="flex items-center justify-between">
-                    <span className="text-gray-300 text-sm">{setting.label}</span>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={profile?.settings[setting.key as keyof AdminProfile['settings']]}
-                        onChange={(e) => updateNotificationSetting(setting.key as keyof AdminProfile['settings'], e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-9 h-5 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
-                    </label>
-                  </div>
-                ))}
               </CardContent>
             </Card>
           </div>

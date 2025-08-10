@@ -12,7 +12,10 @@ import {
   Save,
   RefreshCw,
   AlertTriangle,
-  CheckCircle
+  CheckCircle,
+  Users,
+  Activity,
+  Calendar
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,11 +51,16 @@ interface SystemSettings {
   };
 }
 
+interface AdminPermissions {
+  permissions: string[];
+}
+
 const Settings: React.FC<{ logout: () => void }> = ({ logout }) => {
   const [settings, setSettings] = useState<SystemSettings | null>(null);
+  const [permissions, setPermissions] = useState<AdminPermissions | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'general' | 'notifications' | 'security' | 'integrations'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'permissions' | 'notifications' | 'security' | 'integrations'>('general');
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -87,14 +95,27 @@ const Settings: React.FC<{ logout: () => void }> = ({ logout }) => {
     }
   };
 
+  const defaultPermissions: AdminPermissions = {
+    permissions: [
+      'user_management',
+      'system_settings',
+      'data_export',
+      'security_config',
+      'analytics_access',
+      'task_management'
+    ]
+  };
+
   useEffect(() => {
     const fetchSettings = async () => {
       try {
         await new Promise(resolve => setTimeout(resolve, 1000));
         setSettings(defaultSettings);
+        setPermissions(defaultPermissions);
       } catch (error) {
         console.error('Error fetching settings:', error);
         setSettings(defaultSettings);
+        setPermissions(defaultPermissions);
       } finally {
         setLoading(false);
       }
@@ -138,6 +159,24 @@ const Settings: React.FC<{ logout: () => void }> = ({ logout }) => {
     }
   };
 
+  const getPermissionIcon = (permission: string) => {
+    switch (permission) {
+      case 'user_management': return <Users className="h-4 w-4" />;
+      case 'system_settings': return <SettingsIcon className="h-4 w-4" />;
+      case 'data_export': return <Database className="h-4 w-4" />;
+      case 'security_config': return <Shield className="h-4 w-4" />;
+      case 'analytics_access': return <Activity className="h-4 w-4" />;
+      case 'task_management': return <Calendar className="h-4 w-4" />;
+      default: return <Shield className="h-4 w-4" />;
+    }
+  };
+
+  const getPermissionLabel = (permission: string) => {
+    return permission.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
@@ -152,7 +191,6 @@ const Settings: React.FC<{ logout: () => void }> = ({ logout }) => {
       <div className="flex items-center justify-between p-6 border-b border-gray-800">
         <div className="flex items-center space-x-4">
           <h1 className="text-2xl font-bold">System Settings</h1>
-          <span className="px-3 py-1 bg-purple-600 text-white text-sm rounded-full">Admin Control</span>
         </div>
         
         <div className="flex items-center space-x-4">
@@ -198,6 +236,7 @@ const Settings: React.FC<{ logout: () => void }> = ({ logout }) => {
                 <nav className="space-y-2">
                   {[
                     { id: 'general', label: 'General Settings', icon: SettingsIcon },
+                    { id: 'permissions', label: 'Permissions & Access', icon: User },
                     { id: 'notifications', label: 'Notifications', icon: Bell },
                     { id: 'security', label: 'Security', icon: Shield },
                     { id: 'integrations', label: 'Integrations', icon: Globe }
@@ -328,6 +367,45 @@ const Settings: React.FC<{ logout: () => void }> = ({ logout }) => {
                         />
                         <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
                       </label>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Permissions & Access Settings */}
+            {activeTab === 'permissions' && (
+              <Card className="bg-gray-800 border-gray-700">
+                <CardHeader>
+                  <CardTitle className="text-white">Permissions & Access</CardTitle>
+                  <CardDescription className="text-gray-400">
+                    Manage system permissions and access levels
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div>
+                    <h4 className="text-white font-medium mb-4">Current Permissions</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {permissions?.permissions.map((permission) => (
+                        <div key={permission} className="flex items-center space-x-3 p-3 bg-gray-700 rounded-lg">
+                          <div className="text-green-400">
+                            {getPermissionIcon(permission)}
+                          </div>
+                          <span className="text-white">{getPermissionLabel(permission)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="p-4 bg-blue-900/20 border border-blue-700 rounded-lg">
+                    <div className="flex items-start space-x-3">
+                      <Shield className="h-5 w-5 text-blue-400 mt-0.5" />
+                      <div>
+                        <h4 className="text-blue-400 font-medium">Permission Info</h4>
+                        <p className="text-blue-300 text-sm">
+                          Your current permissions are managed by the system administrator. Contact support if you need additional access rights.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </CardContent>

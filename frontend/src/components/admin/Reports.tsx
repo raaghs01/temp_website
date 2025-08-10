@@ -189,7 +189,6 @@ const Reports: React.FC = () => {
       <div className="flex items-center justify-between p-6 border-b border-gray-800">
         <div className="flex items-center space-x-4">
           <h1 className="text-2xl font-bold">System Reports</h1>
-          <span className="px-3 py-1 bg-purple-600 text-white text-sm rounded-full">Data Analytics</span>
         </div>
         
         <div className="flex items-center space-x-4">
@@ -268,41 +267,6 @@ const Reports: React.FC = () => {
                   <BarChart3 className="h-6 w-6 text-white" />
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="bg-gradient-to-r from-blue-600 to-blue-700 border-0 cursor-pointer hover:from-blue-700 hover:to-blue-800 transition-all">
-            <CardContent className="p-6 text-center">
-              <Users className="h-8 w-8 text-white mx-auto mb-3" />
-              <h3 className="text-white font-bold">Ambassador Report</h3>
-              <p className="text-blue-100 text-sm">Performance & engagement</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-r from-green-600 to-green-700 border-0 cursor-pointer hover:from-green-700 hover:to-green-800 transition-all">
-            <CardContent className="p-6 text-center">
-              <BarChart3 className="h-8 w-8 text-white mx-auto mb-3" />
-              <h3 className="text-white font-bold">Analytics Report</h3>
-              <p className="text-green-100 text-sm">System metrics & trends</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-r from-yellow-600 to-yellow-700 border-0 cursor-pointer hover:from-yellow-700 hover:to-yellow-800 transition-all">
-            <CardContent className="p-6 text-center">
-              <Award className="h-8 w-8 text-white mx-auto mb-3" />
-              <h3 className="text-white font-bold">Financial Report</h3>
-              <p className="text-yellow-100 text-sm">Points & rewards analysis</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-r from-purple-600 to-purple-700 border-0 cursor-pointer hover:from-purple-700 hover:to-purple-800 transition-all">
-            <CardContent className="p-6 text-center">
-              <PieChart className="h-8 w-8 text-white mx-auto mb-3" />
-              <h3 className="text-white font-bold">Custom Report</h3>
-              <p className="text-purple-100 text-sm">Build your own report</p>
             </CardContent>
           </Card>
         </div>

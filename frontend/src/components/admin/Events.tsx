@@ -303,7 +303,6 @@ const Events: React.FC = () => {
       <div className="flex items-center justify-between p-6 border-b border-gray-800">
         <div className="flex items-center space-x-4">
           <h1 className="text-2xl font-bold">Event Management</h1>
-          <span className="px-3 py-1 bg-purple-600 text-white text-sm rounded-full">Admin Control</span>
         </div>
         
         <div className="flex items-center space-x-4">
