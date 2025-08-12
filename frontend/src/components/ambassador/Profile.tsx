@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../../types';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { User as UserIcon, Award, Calendar, Edit, Save, X, Shield, Star, TrendingUp, Activity } from 'lucide-react';
+import { User as UserIcon, Award, Calendar, Edit, Save, X, Shield, Star, TrendingUp, Activity, Lock } from 'lucide-react';
 
 interface ProfileProps {
   user: User | null;
@@ -22,6 +21,65 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // Password change modal state
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    oldPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  // Password change handler
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(null);
+    if (!passwordData.oldPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+      setPasswordError('All fields are required.');
+      return;
+    }
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setPasswordError('New passwords do not match.');
+      return;
+    }
+    if (passwordData.newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters.');
+      return;
+    }
+    setPasswordLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('Not authenticated');
+      const response = await fetch(`${BACKEND_URL}/api/change-password`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          old_password: passwordData.oldPassword,
+          new_password: passwordData.newPassword
+        })
+      });
+      if (response.ok) {
+        setPasswordSuccess('Password changed successfully!');
+        setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+        setShowPasswordModal(false);
+      } else {
+        const errorData = await response.json();
+        setPasswordError(errorData.detail || 'Failed to change password');
+      }
+    } catch (err) {
+      setPasswordError('Error changing password');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+  const handlePasswordInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPasswordData({ ...passwordData, [e.target.name]: e.target.value });
+  };
 
   const handleSave = async (): Promise<void> => {
     setLoading(true);
@@ -97,19 +155,19 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser }) => {
         
         <div className="flex items-center space-x-4">
           {!isEditing ? (
-            <Button
+            <button
               onClick={() => setIsEditing(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className="inline-flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
               <Edit className="h-4 w-4 mr-2" />
               Edit Profile
-            </Button>
+            </button>
           ) : (
             <div className="flex space-x-2">
-              <Button
+              <button
                 onClick={handleSave}
                 disabled={loading}
-                className="bg-green-600 hover:bg-green-700 text-white"
+                className="inline-flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium bg-green-600 hover:bg-green-700 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50"
               >
                 {loading ? (
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -117,14 +175,14 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser }) => {
                   <Save className="h-4 w-4 mr-2" />
                 )}
                 Save
-              </Button>
-              <Button
+              </button>
+              <button
                 onClick={handleCancel}
-                className="bg-gray-600 hover:bg-gray-700 text-white"
+                className="inline-flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium bg-gray-600 hover:bg-gray-700 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
               >
                 <X className="h-4 w-4 mr-2" />
                 Cancel
-              </Button>
+              </button>
             </div>
           )}
         </div>
@@ -149,7 +207,7 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser }) => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
           {/* Profile Card */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 space-y-6">
             <Card className="bg-gray-800 border-gray-700">
               <CardHeader>
                 <CardTitle className="text-white flex items-center space-x-2">
@@ -237,6 +295,119 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser }) => {
                     )}
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Security Card (moved from Settings) */}
+            <Card className="bg-gray-800 border-gray-700">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center space-x-2">
+                  <Shield className="h-6 w-6 text-green-400" />
+                  <span>Security</span>
+                </CardTitle>
+                <CardDescription className="text-gray-400">
+                  Protect your account with security features
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="bg-gray-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium text-white">Change Password</h4>
+                      <p className="text-gray-400 text-sm">Update your account password</p>
+                    </div>
+                    <button
+                      className="text-gray-400 hover:text-green-400 text-sm font-medium transition-colors"
+                      onClick={() => setShowPasswordModal(true)}
+                    >
+                      Update
+                    </button>
+                  </div>
+                </div>
+                {/* Password Change Modal */}
+                {showPasswordModal && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60">
+                    <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-lg w-full max-w-md p-6 relative">
+                      <button
+                        className="absolute top-3 right-3 text-gray-400 hover:text-white"
+                        onClick={() => setShowPasswordModal(false)}
+                        aria-label="Close"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                      <div className="flex items-center space-x-2 mb-4">
+                        <Lock className="h-5 w-5 text-green-400" />
+                        <span className="text-lg font-semibold text-white">Change Password</span>
+                      </div>
+                      <form onSubmit={handlePasswordChange} className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-1">Current Password</label>
+                          <input
+                            type="password"
+                            name="oldPassword"
+                            value={passwordData.oldPassword}
+                            onChange={handlePasswordInput}
+                            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-green-500"
+                            placeholder="Enter current password"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-1">New Password</label>
+                          <input
+                            type="password"
+                            name="newPassword"
+                            value={passwordData.newPassword}
+                            onChange={handlePasswordInput}
+                            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-green-500"
+                            placeholder="Enter new password"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-1">Confirm New Password</label>
+                          <input
+                            type="password"
+                            name="confirmPassword"
+                            value={passwordData.confirmPassword}
+                            onChange={handlePasswordInput}
+                            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-green-500"
+                            placeholder="Confirm new password"
+                            required
+                          />
+                        </div>
+                        {passwordError && (
+                          <div className="text-red-400 text-sm flex items-center gap-2">
+                            <Shield className="h-4 w-4 flex-shrink-0" />
+                            <span>{passwordError}</span>
+                          </div>
+                        )}
+                        {passwordSuccess && (
+                          <div className="text-green-400 text-sm flex items-center gap-2">
+                            <Star className="h-4 w-4 flex-shrink-0" />
+                            <span>{passwordSuccess}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-end space-x-2 mt-4">
+                          <button
+                            type="button"
+                            className="px-4 py-2 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600"
+                            onClick={() => setShowPasswordModal(false)}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 font-medium"
+                            disabled={passwordLoading}
+                          >
+                            {passwordLoading ? 'Updating...' : 'Update Password'}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

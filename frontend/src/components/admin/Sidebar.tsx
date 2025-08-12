@@ -73,7 +73,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user, logout
         </div>
       </div> */}
 
-      {/* User Profile Section */}
+      {/* User Profile Section with Sign Out Button */}
       <div className="p-4 border-t border-gray-800">
         <div className="flex items-center space-x-3 mb-3">
           <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
@@ -90,14 +90,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user, logout
             </p>
           </div>
         </div>
-        
-        {/* Logout Button */}
         <button
           onClick={logout}
-          className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-gray-300 hover:text-white transition-colors text-sm"
+          className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white transition-colors text-sm font-medium mt-2"
         >
           <span>🚪</span>
-          <span>Logout</span>
+          <span>Sign Out ({user?.name || 'Admin'})</span>
         </button>
       </div>
     </div>

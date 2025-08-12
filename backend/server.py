@@ -1,12 +1,12 @@
-from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form, Depends, Body
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field
 from typing import List, Optional
 import uuid
 from datetime import datetime, timedelta
@@ -15,6 +15,7 @@ import hashlib
 import base64
 from io import BytesIO
 
+# Load environment variables
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -30,7 +31,6 @@ JWT_EXPIRATION_DELTA = timedelta(days=30)
 
 # Create the main app without a prefix
 app = FastAPI()
-from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
@@ -687,3 +687,29 @@ logger = logging.getLogger(__name__)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+
+# Change password endpoint
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+@api_router.post("/api/change-password")
+async def change_password(
+    data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user)
+):
+    # Verify old password
+    if not verify_password(data.old_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Old password is incorrect")
+
+    # Hash new password
+    new_password_hash = hash_password(data.new_password)
+
+    # Update password in database
+    await db.users.update_one(
+        {"id": current_user.id},
+        {"$set": {"password_hash": new_password_hash}}
+    )
+
+    return {"message": "Password changed successfully"}

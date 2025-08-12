@@ -1,4 +1,34 @@
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { Sun, Moon } from 'lucide-react';
+// Theme Context
+type Theme = 'dark' | 'light';
+interface ThemeContextType {
+  theme: Theme;
+  toggleTheme: () => void;
+}
+const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+export const useTheme = (): ThemeContextType => {
+  const context = useContext(ThemeContext);
+  if (!context) throw new Error('useTheme must be used within a ThemeProvider');
+  return context;
+};
+
+const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [theme, setTheme] = useState<Theme>(
+    (localStorage.getItem('theme') as Theme) || 'dark'
+  );
+  useEffect(() => {
+    document.documentElement.classList.remove('dark', 'light');
+    document.documentElement.classList.add(theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+  const toggleTheme = () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+};
 import './App.css';
 import axios from 'axios';
 import { Button } from '@/components/ui/button';
@@ -10,7 +40,7 @@ import * as Admin from '@/components/admin';
 // Role-based sidebar imports handled below
 import { User } from '@/types';
 
-const BACKEND_URL = 'http://127.0.0.1:8000';
+const BACKEND_URL = 'http://127.0.0.1:5000';
 const API = `${BACKEND_URL}/api`;
 
 // Debug logging
@@ -553,24 +583,42 @@ const Dashboard: React.FC = () => {
 // Main App Component
 const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ThemeProvider>
   );
 };
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
+  const { theme, toggleTheme } = useTheme();
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-xl text-gray-400">Loading...</div>
+      <div className={`min-h-screen ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'} flex items-center justify-center`}>
+        <div className={`text-xl ${theme === 'dark' ? 'text-gray-400' : 'text-gray-700'}`}>Loading...</div>
       </div>
     );
   }
 
-  return user ? <Dashboard /> : <LoginForm />;
+  // Theme toggle button for all pages (top right)
+  return (
+    <div className={theme === 'dark' ? 'bg-gray-900 text-white min-h-screen' : 'bg-white text-gray-900 min-h-screen'}>
+      <div className="w-full flex justify-end items-center p-4 border-b border-gray-800 sticky top-0 z-50 bg-inherit">
+        <button
+          onClick={toggleTheme}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-lg border border-gray-700 ${theme === 'dark' ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'} transition-colors`}
+          aria-label="Toggle theme"
+        >
+          {theme === 'dark' ? <Sun className="h-5 w-5 text-yellow-400" /> : <Moon className="h-5 w-5 text-blue-500" />}
+          <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+        </button>
+      </div>
+      {user ? <Dashboard /> : <LoginForm />}
+    </div>
+  );
 };
 
 export default App; 
