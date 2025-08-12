@@ -5,8 +5,6 @@ export { default as Community } from '../ambassador/Community';
 export { default as Analytics } from '../ambassador/Analytics';
 export { default as Reports } from '../ambassador/Reports';
 export { default as Messages } from '../ambassador/Messages';
-export { default as Settings } from '../ambassador/Settings';
-export { default as Events } from '../ambassador/Events';
 export { default as History } from '../ambassador/History';
 export { default as Profile } from '../ambassador/Profile';
 export { default as Sidebar } from './Sidebar';

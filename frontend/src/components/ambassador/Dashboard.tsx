@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Bell, TrendingUp, Users, Award, Calendar, CheckCircle, Eye } from 'lucide-react';
+import { Bell, TrendingUp, Users, Award, Calendar, CheckCircle, Eye, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useTaskData } from '../../hooks/useTaskData';
 
-const BACKEND_URL = 'http://127.0.0.1:8000';
+const BACKEND_URL = 'http://127.0.0.1:5000';
 
 interface DashboardStats {
   current_day_tasks: number;
@@ -22,10 +23,11 @@ interface DashboardStats {
   };
 }
 
-const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ user, refreshUser }) => {
+const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ user }) => {
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState(3);
+  const { stats } = useTaskData();
   const [showVideoModal, setShowVideoModal] = useState(false);
 
   // Sample data for demonstration
@@ -47,12 +49,28 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
   };
 
   useEffect(() => {
-    // Simulate API call
     const fetchDashboardStats = async () => {
       try {
-        // Simulate loading
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setDashboardStats(sampleStats);
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setLoading(false);
+          return;
+        }
+
+        const response = await fetch(`${BACKEND_URL}/api/dashboard-stats`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setDashboardStats(data);
+        } else {
+          console.error('Failed to fetch dashboard stats');
+          setDashboardStats(sampleStats); // Fallback to sample data
+        }
       } catch (error) {
         console.error('Error fetching dashboard stats:', error);
         setDashboardStats(sampleStats); // Fallback to sample data
@@ -71,6 +89,13 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
   const navigateToLeaderboardAnalytics = (): void => {
     const navigationEvent = new CustomEvent('navigate', {
       detail: { tab: 'leaderboard', hash: '#analytics' }
+    });
+    window.dispatchEvent(navigationEvent);
+  };
+
+  const navigateToTasks = (): void => {
+    const navigationEvent = new CustomEvent('navigate', {
+      detail: { tab: 'tasks' }
     });
     window.dispatchEvent(navigationEvent);
   };
@@ -119,7 +144,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
           <p className="text-gray-400">Here's what's happening with your ambassador program today.</p>
         </div>
 
-        {/* Stats Grid (Current Day, Tasks Completed, Total Points, Current Rank) */}
+        {/* Enhanced Stats Grid with Task Completion Data */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card className="bg-gray-800 border-gray-700 hover:bg-gray-750 transition-colors">
             <CardContent className="p-6">
@@ -141,8 +166,8 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm font-medium">Tasks Completed</p>
-                  <p className="text-2xl font-bold text-white mt-1">{dashboardStats?.tasks_completed || 0}</p>
-                  <p className="text-green-400 text-xs mt-1">+8% from last week</p>
+                  <p className="text-2xl font-bold text-white mt-1">{stats.completedTasks || 0}</p>
+                  <p className="text-blue-400 text-xs mt-1">{stats.completionRate.toFixed(1)}% completion rate</p>
                 </div>
                 <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center">
                   <CheckCircle className="h-6 w-6 text-white" />
@@ -156,8 +181,8 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm font-medium">Total Points</p>
-                  <p className="text-2xl font-bold text-white mt-1">{dashboardStats?.total_points || 0}</p>
-                  <p className="text-green-400 text-xs mt-1">+15% from last week</p>
+                  <p className="text-2xl font-bold text-white mt-1">{stats.totalPoints || 0}</p>
+                  <p className="text-green-400 text-xs mt-1">Avg {stats.averagePointsPerTask.toFixed(0)} per task</p>
                 </div>
                 <div className="w-12 h-12 bg-yellow-600 rounded-lg flex items-center justify-center">
                   <Award className="h-6 w-6 text-white" />
@@ -195,27 +220,41 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-gray-300">Completion Rate</span>
-                    <span className="text-sm font-medium text-white">{dashboardStats?.completion_rate || 0}%</span>
+                    <span className="text-sm font-medium text-white">{stats.completionRate.toFixed(1)}%</span>
                   </div>
                   <div className="w-full bg-gray-700 rounded-full h-3">
-                    <div 
+                    <div
                       className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500"
-                      style={{ width: `${dashboardStats?.completion_rate || 0}%` }}
+                      style={{ width: `${stats.completionRate}%` }}
                     ></div>
                   </div>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-gray-700 rounded-lg p-4 text-center">
                     <Users className="h-8 w-8 text-blue-400 mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-white">{dashboardStats?.people_connected || 0}</p>
+                    <p className="text-2xl font-bold text-white">{stats.totalPeopleConnected}</p>
                     <p className="text-gray-400 text-sm">People Connected</p>
                   </div>
-                  
+
                   <div className="bg-gray-700 rounded-lg p-4 text-center">
                     <CheckCircle className="h-8 w-8 text-green-400 mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-white">{dashboardStats?.tasks_completed || 0}</p>
+                    <p className="text-2xl font-bold text-white">{stats.completedTasks}</p>
                     <p className="text-gray-400 text-sm">Tasks Completed</p>
+                  </div>
+                </div>
+
+                {/* Additional Progress Metrics */}
+                <div className="border-t border-gray-600 pt-4">
+                  <div className="grid grid-cols-2 gap-4 text-center">
+                    <div>
+                      <p className="text-lg font-bold text-white">{stats.totalTasks}</p>
+                      <p className="text-gray-400 text-xs">Total Tasks</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold text-white">{stats.averagePointsPerTask.toFixed(0)}</p>
+                      <p className="text-gray-400 text-xs">Avg Points/Task</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -240,8 +279,8 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
             </CardHeader>
             <CardContent>
               <div className="h-64 bg-gray-700 rounded-lg p-4">
-                {/* Simple inline SVG line chart (no extra deps) */}
-                <SimpleLineChart />
+                {/* Performance chart with real data */}
+                <PerformanceChart completions={stats.recentCompletions} monthlyProgress={stats.monthlyProgress} />
               </div>
             </CardContent>
           </Card>
@@ -273,7 +312,66 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
             </CardContent>
           </Card>
         )}
-        
+
+        {/* Recent Task Completions */}
+        {stats.recentCompletions.length > 0 && (
+          <Card className="bg-gray-800 border-gray-700 mb-8">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center space-x-2">
+                <Clock className="h-6 w-6 text-blue-400" />
+                <span>Recent Task Completions</span>
+              </CardTitle>
+              <CardDescription className="text-gray-400">
+                Your latest completed tasks and achievements
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {stats.recentCompletions.slice(0, 3).map((completion) => (
+                  <div
+                    key={completion.id}
+                    className="flex items-center justify-between p-4 bg-gray-700 rounded-lg hover:bg-gray-650 transition-colors"
+                  >
+                    <div className="flex items-center space-x-4">
+                      <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
+                        <CheckCircle className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <h4 className="text-white font-medium">{completion.taskTitle}</h4>
+                        <p className="text-gray-400 text-sm">
+                          Day {completion.day}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-yellow-400 font-medium">+{completion.points}</span>
+                        <Award className="h-4 w-4 text-yellow-400" />
+                      </div>
+                      <p className="text-gray-400 text-xs">
+                        {new Date(completion.completedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {stats.recentCompletions.length > 3 && (
+                <div className="mt-4 text-center">
+                  <Button
+                    variant="outline"
+                    className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
+                    onClick={navigateToTasks}
+                  >
+                    View All Completions
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+
+
         {/* Video Modal */}
         <div className={`${showVideoModal ? 'fixed' : 'hidden'} inset-0 z-50 flex items-center justify-center`}
              role="dialog" aria-modal="true">
@@ -324,19 +422,56 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
 
 export default Dashboard;
 
-// Lightweight inline chart component (kept at bottom of file for locality)
-const SimpleLineChart: React.FC = () => {
-  // Static demo data with x-axis labels (Mon-Sun)
-  const labels: string[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const points: number[] = [20, 35, 30, 50, 45, 60, 55];
+// Performance chart component with real data
+interface PerformanceChartProps {
+  completions: any[];
+  monthlyProgress: { month: string; tasks: number; points: number }[];
+}
+
+const PerformanceChart: React.FC<PerformanceChartProps> = ({ completions }) => {
+  // Generate last 7 days data from completions
+  const generateWeeklyData = () => {
+    const today = new Date();
+    const weekData = [];
+
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+      const dateStr = date.toISOString().split('T')[0];
+
+      // Count completions for this day
+      const dayCompletions = completions.filter(comp => {
+        const compDate = new Date(comp.completedAt).toISOString().split('T')[0];
+        return compDate === dateStr;
+      });
+
+      const totalPoints = dayCompletions.reduce((sum, comp) => sum + comp.points, 0);
+
+      weekData.push({
+        label: dayName,
+        tasks: dayCompletions.length,
+        points: totalPoints
+      });
+    }
+
+    return weekData;
+  };
+
+  const weeklyData = generateWeeklyData();
+  const labels = weeklyData.map(d => d.label);
+  const points = weeklyData.map(d => d.points);
+
+  // Chart dimensions
   const width = 600;
   const height = 180;
   const padding = 32;
   const step = (width - padding * 2) / (points.length - 1);
-  const maxVal = Math.max(...points);
-  const minVal = Math.min(...points);
+  const maxVal = Math.max(...points, 1); // Ensure at least 1 to avoid divide by zero
+  const minVal = Math.min(...points, 0);
+
   const scaleY = (value: number) => {
-    if (maxVal === minVal) return height / 2; // avoid divide by zero
+    if (maxVal === minVal) return height / 2;
     return padding + (height - padding * 2) * (1 - (value - minVal) / (maxVal - minVal));
   };
 
@@ -355,66 +490,97 @@ const SimpleLineChart: React.FC = () => {
   const [hoverIndex, setHoverIndex] = React.useState<number | null>(null);
 
   return (
-    <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
-      {/* Gridlines and Y labels */}
-      {yTicks.map((t) => {
-        const y = scaleY(t);
-        return (
-          <g key={`grid-${t}`}>
-            <line x1={padding} y1={y} x2={width - padding} y2={y} stroke="#374151" strokeDasharray="4 4" strokeWidth={1} />
-            <text x={padding - 8} y={y + 4} textAnchor="end" fontSize="10" fill="#9CA3AF">{t}</text>
-          </g>
-        );
-      })}
+    <div className="w-full h-full">
+      {/* Chart Header with Summary */}
+      <div className="flex justify-between items-center mb-4">
+        <div className="text-sm text-gray-300">
+          Last 7 Days Performance
+        </div>
+        <div className="text-xs text-gray-400">
+          Total: {points.reduce((sum, p) => sum + p, 0)} points
+        </div>
+      </div>
 
-      {/* Axes */}
-      <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#4B5563" strokeWidth={2} />
-      <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#4B5563" strokeWidth={2} />
+      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
+        {/* Gridlines and Y labels */}
+        {yTicks.map((t) => {
+          const y = scaleY(t);
+          return (
+            <g key={`grid-${t}`}>
+              <line x1={padding} y1={y} x2={width - padding} y2={y} stroke="#374151" strokeDasharray="4 4" strokeWidth={1} />
+              <text x={padding - 8} y={y + 4} textAnchor="end" fontSize="10" fill="#9CA3AF">{t}</text>
+            </g>
+          );
+        })}
 
-      {/* X labels */}
-      {labels.map((label, i) => (
-        <text key={label} x={padding + i * step} y={height - padding + 16} textAnchor="middle" fontSize="10" fill="#9CA3AF">
-          {label}
-        </text>
-      ))}
+        {/* Axes */}
+        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#4B5563" strokeWidth={2} />
+        <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#4B5563" strokeWidth={2} />
 
-      {/* Area fill */}
-      <polyline
-        points={`${polyPoints} ${width - padding},${height - padding} ${padding},${height - padding}`}
-        fill="url(#gradient)"
-        stroke="none"
-        opacity={0.3}
-      />
+        {/* X labels */}
+        {labels.map((label, i) => (
+          <text key={label} x={padding + i * step} y={height - padding + 16} textAnchor="middle" fontSize="10" fill="#9CA3AF">
+            {label}
+          </text>
+        ))}
 
-      {/* Line */}
-      <polyline points={polyPoints} fill="none" stroke="#60A5FA" strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" />
+        {/* Area fill */}
+        <polyline
+          points={`${polyPoints} ${width - padding},${height - padding} ${padding},${height - padding}`}
+          fill="url(#performanceGradient)"
+          stroke="none"
+          opacity={0.3}
+        />
 
-      {/* Points + tooltip */}
-      {points.map((v, i) => {
-        const cx = padding + i * step;
-        const cy = scaleY(v);
-        const isActive = hoverIndex === i;
-        return (
-          <g key={i} onMouseEnter={() => setHoverIndex(i)} onMouseLeave={() => setHoverIndex(null)}>
-            <circle cx={cx} cy={cy} r={4} fill={isActive ? '#FFFFFF' : '#93C5FD'} stroke="#60A5FA" strokeWidth={isActive ? 2 : 0} />
-            <circle cx={cx} cy={cy} r={12} fill="transparent" />
-            {isActive && (
-              <g>
-                <rect x={cx - 28} y={cy - 40} rx={4} width={56} height={24} fill="#111827" stroke="#1F2937" />
-                <text x={cx} y={cy - 25} textAnchor="middle" fontSize="10" fill="#E5E7EB">{labels[i]}: {v}</text>
-              </g>
-            )}
-          </g>
-        );
-      })}
+        {/* Line */}
+        <polyline points={polyPoints} fill="none" stroke="#60A5FA" strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" />
 
-      {/* Gradient defs */}
-      <defs>
-        <linearGradient id="gradient" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#60A5FA" stopOpacity={0.6} />
-          <stop offset="100%" stopColor="#60A5FA" stopOpacity={0} />
-        </linearGradient>
-      </defs>
-    </svg>
+        {/* Points + tooltip */}
+        {points.map((v, i) => {
+          const cx = padding + i * step;
+          const cy = scaleY(v);
+          const isActive = hoverIndex === i;
+          const dayData = weeklyData[i];
+          return (
+            <g key={i} onMouseEnter={() => setHoverIndex(i)} onMouseLeave={() => setHoverIndex(null)}>
+              <circle cx={cx} cy={cy} r={4} fill={isActive ? '#FFFFFF' : '#93C5FD'} stroke="#60A5FA" strokeWidth={isActive ? 2 : 0} />
+              <circle cx={cx} cy={cy} r={12} fill="transparent" />
+              {isActive && (
+                <g>
+                  <rect x={cx - 35} y={cy - 50} rx={4} width={70} height={35} fill="#111827" stroke="#1F2937" />
+                  <text x={cx} y={cy - 35} textAnchor="middle" fontSize="9" fill="#E5E7EB">{labels[i]}</text>
+                  <text x={cx} y={cy - 25} textAnchor="middle" fontSize="9" fill="#60A5FA">{v} points</text>
+                  <text x={cx} y={cy - 15} textAnchor="middle" fontSize="9" fill="#9CA3AF">{dayData.tasks} tasks</text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+
+        {/* Gradient defs */}
+        <defs>
+          <linearGradient id="performanceGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#60A5FA" stopOpacity={0.6} />
+            <stop offset="100%" stopColor="#60A5FA" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+      </svg>
+
+      {/* Performance Summary */}
+      <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+        <div>
+          <p className="text-xs text-gray-400">Avg Daily</p>
+          <p className="text-sm font-semibold text-white">{(points.reduce((sum, p) => sum + p, 0) / 7).toFixed(0)} pts</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-400">Best Day</p>
+          <p className="text-sm font-semibold text-green-400">{Math.max(...points)} pts</p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-400">Tasks/Week</p>
+          <p className="text-sm font-semibold text-blue-400">{weeklyData.reduce((sum, d) => sum + d.tasks, 0)}</p>
+        </div>
+      </div>
+    </div>
   );
 };

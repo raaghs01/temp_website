@@ -125,7 +125,8 @@ const LoginForm: React.FC = () => {
     email: '',
     password: '',
     name: '',
-    college: ''
+    college: '',
+    groupLeaderName: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -158,6 +159,9 @@ const LoginForm: React.FC = () => {
         }
         if (!formData.college.trim()) {
           missingFields.push('College/University');
+        }
+        if (!formData.groupLeaderName.trim()) {
+          missingFields.push('Group Leader Name');
         }
       }
       
@@ -209,8 +213,15 @@ const LoginForm: React.FC = () => {
     try {
       const endpoint = isLogin ? '/login' : '/register';
       const fullUrl = `${API}${endpoint}`;
-      const requestData = {
+      const requestData = isLogin ? {
         ...formData,
+        role: userRole
+      } : {
+        email: formData.email,
+        password: formData.password,
+        name: formData.name,
+        college: formData.college,
+        group_leader_name: formData.groupLeaderName,
         role: userRole
       };
       console.log('Making request to:', fullUrl);
@@ -255,7 +266,8 @@ const LoginForm: React.FC = () => {
       email: '',
       password: '',
       name: '',
-      college: ''
+      college: '',
+      groupLeaderName: ''
     });
   };
 
@@ -329,7 +341,7 @@ const LoginForm: React.FC = () => {
               <>
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg mb-4">
                   <p className="text-sm text-blue-700">
-                    <strong>College Ambassador Registration:</strong> Please provide your full name and college/university for your ambassador profile.
+                    <strong>College Ambassador Registration:</strong> Please provide your full name, college/university, and group leader name for your ambassador profile.
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -358,6 +370,20 @@ const LoginForm: React.FC = () => {
                     required
                     placeholder="Enter your college/university"
                     className={`w-full ${!formData.college.trim() && error.includes('College/University') ? 'border-red-500 focus:border-red-500' : ''}`}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    Group Leader Name <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="text"
+                    name="groupLeaderName"
+                    value={formData.groupLeaderName}
+                    onChange={handleChange}
+                    required
+                    placeholder="Enter your group leader's name"
+                    className={`w-full ${!formData.groupLeaderName.trim() && error.includes('Group Leader Name') ? 'border-red-500 focus:border-red-500' : ''}`}
                   />
                 </div>
               </>
@@ -533,7 +559,7 @@ const Dashboard: React.FC = () => {
         case 'history':
           return <Admin.History />;
         case 'profile':
-          return <Admin.Profile user={user} refreshUser={refreshUser} />;
+          return <Admin.Profile user={user} refreshUser={refreshUser} logout={logout} />;
         default:
           return <Admin.Dashboard user={user} refreshUser={refreshUser} />;
       }
@@ -544,21 +570,19 @@ const Dashboard: React.FC = () => {
         case 'tasks':
           return <Ambassador.Tasks refreshUser={refreshUser} />;
         case 'leaderboard':
-          return <Ambassador.Leaderboard />;
+          return <Ambassador.Leaderboard user={user} />;
         // case 'community':
         //   return <Community />;
         case 'profile':
-          return <Ambassador.Profile user={user} refreshUser={refreshUser} />;
+          return <Ambassador.Profile user={user} refreshUser={refreshUser} logout={logout} />;
         // case 'analytics':
         //   return <Analytics />;
         case 'reports':
           return <Ambassador.Reports />;
         // case 'messages':
         //   return <Messages />;
-        case 'settings':
-          return <Ambassador.Settings logout={logout} />;
-        case 'events':
-          return <Ambassador.Events />;
+
+
         case 'history':
           return <Ambassador.History />;
         default:

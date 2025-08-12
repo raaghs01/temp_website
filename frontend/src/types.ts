@@ -3,6 +3,7 @@ export interface User {
   name: string;
   email: string;
   college: string;
+  group_leader_name: string;
   role: 'ambassador' | 'admin';
   total_points: number;
   rank_position: number;

@@ -2,21 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { User } from '../../types';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { User as UserIcon, Award, Calendar, Edit, Save, X, Shield, Star, TrendingUp, Activity, Lock } from 'lucide-react';
+import { User as UserIcon, Award, Calendar, Edit, Save, X, Shield, Star, TrendingUp, Activity, Lock, Settings as SettingsIcon, Bell, HelpCircle, LogOut } from 'lucide-react';
+import ConfirmDialog from '../ConfirmDialog';
 
 interface ProfileProps {
   user: User | null;
   refreshUser: () => Promise<void>;
+  logout?: () => void;
 }
 
-const BACKEND_URL = 'http://127.0.0.1:8000';
+const BACKEND_URL = 'http://127.0.0.1:5000';
 
-const Profile: React.FC<ProfileProps> = ({ user, refreshUser }) => {
+const Profile: React.FC<ProfileProps> = ({ user, refreshUser, logout }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     name: user?.name || '',
     college: user?.college || '',
-    email: user?.email || ''
+    email: user?.email || '',
+    groupLeaderName: user?.group_leader_name || ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +34,7 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser }) => {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [showSignOutDialog, setShowSignOutDialog] = useState(false);
   // Password change handler
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,7 +100,12 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser }) => {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          college: formData.college,
+          group_leader_name: formData.groupLeaderName
+        }),
       });
 
       if (response.ok) {
@@ -118,7 +127,8 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser }) => {
     setFormData({
       name: user?.name || '',
       college: user?.college || '',
-      email: user?.email || ''
+      email: user?.email || '',
+      groupLeaderName: user?.group_leader_name || ''
     });
     setIsEditing(false);
     setError(null);
@@ -133,7 +143,8 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser }) => {
     setFormData({
       name: user?.name || '',
       college: user?.college || '',
-      email: user?.email || ''
+      email: user?.email || '',
+      groupLeaderName: user?.group_leader_name || ''
     });
   }, [user]);
 
@@ -150,14 +161,17 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser }) => {
       {/* Header */}
       <div className="flex items-center justify-between p-6 border-b border-gray-800">
         <div className="flex items-center space-x-4">
-          <h1 className="text-2xl font-bold">Profile</h1>
+          <h1 className="text-2xl font-bold">Profile & Settings</h1>
+          <div className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm">
+            Manage Account
+          </div>
         </div>
-        
+
         <div className="flex items-center space-x-4">
           {!isEditing ? (
             <button
               onClick={() => setIsEditing(true)}
-              className="inline-flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="inline-flex items-center justify-center px-6 py-3 rounded-md text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shadow-lg"
             >
               <Edit className="h-4 w-4 mr-2" />
               Edit Profile
@@ -174,7 +188,7 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser }) => {
                 ) : (
                   <Save className="h-4 w-4 mr-2" />
                 )}
-                Save
+                Save Changes
               </button>
               <button
                 onClick={handleCancel}
@@ -294,6 +308,26 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser }) => {
                       </div>
                     )}
                   </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Group Leader Name
+                    </label>
+                    {isEditing ? (
+                      <Input
+                        type="text"
+                        name="groupLeaderName"
+                        value={formData.groupLeaderName}
+                        onChange={handleChange}
+                        className="bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:border-blue-500"
+                        placeholder="Enter your group leader name"
+                      />
+                    ) : (
+                      <div className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white">
+                        {user.group_leader_name || 'Not specified'}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -410,6 +444,74 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser }) => {
                 )}
               </CardContent>
             </Card>
+
+            {/* Preferences Card */}
+            <Card className="bg-gray-800 border-gray-700">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center space-x-2">
+                  <SettingsIcon className="h-6 w-6 text-purple-400" />
+                  <span>Preferences</span>
+                </CardTitle>
+                <CardDescription className="text-gray-400">
+                  Customize your account preferences
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="bg-gray-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium text-white flex items-center space-x-2">
+                        <Bell className="h-4 w-4 text-blue-400" />
+                        <span>Email Notifications</span>
+                      </h4>
+                      <p className="text-gray-400 text-sm">Receive updates about tasks and achievements</p>
+                    </div>
+                    <button
+                      className="w-10 h-6 bg-green-600 rounded-full relative focus:outline-none"
+                      onClick={() => alert('Email notifications toggled')}
+                    >
+                      <div className="w-4 h-4 bg-white rounded-full absolute right-1 top-1"></div>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-gray-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium text-white flex items-center space-x-2">
+                        <HelpCircle className="h-4 w-4 text-yellow-400" />
+                        <span>Help & Support</span>
+                      </h4>
+                      <p className="text-gray-400 text-sm">Get help and contact support</p>
+                    </div>
+                    <button
+                      className="text-blue-400 hover:text-blue-300 text-sm font-medium transition-colors"
+                      onClick={() => alert('Help center opened')}
+                    >
+                      Open
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-gray-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium text-white flex items-center space-x-2">
+                        <LogOut className="h-4 w-4 text-red-400" />
+                        <span>Sign Out</span>
+                      </h4>
+                      <p className="text-gray-400 text-sm">Sign out of your account</p>
+                    </div>
+                    <button
+                      className="text-red-400 hover:text-red-300 text-sm font-medium transition-colors"
+                      onClick={() => setShowSignOutDialog(true)}
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Stats Card */}
@@ -496,6 +598,26 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser }) => {
           </Card>
         </div>
       </div>
+
+      {/* Sign Out Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showSignOutDialog}
+        onClose={() => setShowSignOutDialog(false)}
+        onConfirm={() => {
+          if (logout) {
+            logout();
+          } else {
+            // Fallback if logout function is not provided
+            localStorage.removeItem('token');
+            window.location.reload();
+          }
+        }}
+        title="Sign Out"
+        message="Are you sure you want to sign out? You will need to log in again to access your account."
+        confirmText="Sign Out"
+        cancelText="Cancel"
+        type="danger"
+      />
     </div>
   );
 };

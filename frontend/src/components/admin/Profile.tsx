@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  User, 
-  Mail, 
-  Shield, 
+import {
+  User,
+  Mail,
+  Shield,
   Calendar,
   Edit3,
   Save,
@@ -13,7 +13,8 @@ import {
   Activity,
   Settings,
   Database,
-  Users
+  Users,
+  LogOut
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,7 +43,7 @@ interface AdminStats {
   uptime_maintained: number;
 }
 
-const Profile: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ user, refreshUser }) => {
+const Profile: React.FC<{ user: any; refreshUser: () => Promise<void>; logout?: () => void }> = ({ user, refreshUser, logout }) => {
   const [profile, setProfile] = useState<AdminProfile | null>(null);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -332,14 +333,32 @@ const Profile: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ us
                   </div>
                 </div>
 
-                <div className="flex justify-start">
-                  <Button 
+                <div className="flex justify-start space-x-3">
+                  <Button
                     onClick={() => setShowPasswordModal(true)}
-                    variant="outline" 
+                    variant="outline"
                     className="border-gray-600 text-gray-300"
                   >
                     <Key className="h-4 w-4 mr-2" />
                     Change Password
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to sign out?')) {
+                        if (logout) {
+                          logout();
+                        } else {
+                          // Fallback if logout function is not provided
+                          localStorage.removeItem('token');
+                          window.location.reload();
+                        }
+                      }
+                    }}
+                    variant="outline"
+                    className="border-red-600 text-red-400 hover:bg-red-900/20"
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Sign Out
                   </Button>
                 </div>
               </CardContent>

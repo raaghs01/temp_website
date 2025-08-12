@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Clock, CheckCircle, AlertCircle, Calendar, Award, FileText, Image as ImageIcon, Filter, Search, Download } from 'lucide-react';
+import { Clock, CheckCircle, AlertCircle, Calendar, Award, FileText, Image as ImageIcon, Filter, Search, Download, Users, Target, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useTaskData, useFilteredTaskData } from '../../hooks/useTaskData';
 
-const BACKEND_URL = 'http://127.0.0.1:8000';
+const BACKEND_URL = 'http://127.0.0.1:5000';
 
 const History: React.FC = () => {
   const [submissions, setSubmissions] = useState<any[]>([]);
@@ -11,6 +12,14 @@ const History: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'completed' | 'pending'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+
+  // Use the new task data service
+  const { completions, stats, loading: taskLoading, error: taskError } = useTaskData();
+  const filteredData = useFilteredTaskData({
+    status: filter === 'completed' ? 'completed' : undefined,
+    dateRange: dateRange.start && dateRange.end ? dateRange : undefined
+  });
 
   const fetchSubmissions = async (): Promise<void> => {
     try {
@@ -71,15 +80,13 @@ const History: React.FC = () => {
     }
   };
 
-  const filteredSubmissions = submissions.filter(submission => {
-    const matchesFilter = filter === 'all' || 
-      (filter === 'completed' && submission.status?.toLowerCase() === 'completed') ||
-      (filter === 'pending' && submission.status?.toLowerCase() === 'pending');
-    
-    const matchesSearch = submission.task_title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         submission.submission_text?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    return matchesFilter && matchesSearch;
+  // Use filtered data from the hook and apply search filter
+  const filteredSubmissions = filteredData.completions.filter(completion => {
+    const matchesSearch = completion.taskTitle?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      completion.submissionText?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      completion.category?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    return matchesSearch;
   });
 
   if (loading) {
@@ -111,14 +118,14 @@ const History: React.FC = () => {
 
       {/* Main Content */}
       <div className="p-6">
-        {/* Stats Overview */}
+        {/* Enhanced Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className="bg-gray-800 border-gray-700">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm font-medium">Total Submissions</p>
-                  <p className="text-2xl font-bold text-white mt-1">{submissions.length}</p>
+                  <p className="text-2xl font-bold text-white mt-1">{filteredData.completions.length}</p>
                   <p className="text-blue-400 text-xs mt-1">All time</p>
                 </div>
                 <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
@@ -133,9 +140,7 @@ const History: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm font-medium">Completed</p>
-                  <p className="text-2xl font-bold text-white mt-1">
-                    {submissions.filter(s => s.status?.toLowerCase() === 'completed').length}
-                  </p>
+                  <p className="text-2xl font-bold text-white mt-1">{filteredData.completions.length}</p>
                   <p className="text-green-400 text-xs mt-1">Approved tasks</p>
                 </div>
                 <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center">
@@ -149,14 +154,12 @@ const History: React.FC = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-400 text-sm font-medium">Pending</p>
-                  <p className="text-2xl font-bold text-white mt-1">
-                    {submissions.filter(s => s.status?.toLowerCase() === 'pending').length}
-                  </p>
-                  <p className="text-yellow-400 text-xs mt-1">Under review</p>
+                  <p className="text-gray-400 text-sm font-medium">Total Points</p>
+                  <p className="text-2xl font-bold text-white mt-1">{filteredData.stats.totalPoints}</p>
+                  <p className="text-yellow-400 text-xs mt-1">Avg {filteredData.stats.averagePointsPerTask.toFixed(0)} per task</p>
                 </div>
                 <div className="w-12 h-12 bg-yellow-600 rounded-lg flex items-center justify-center">
-                  <Clock className="h-6 w-6 text-white" />
+                  <Award className="h-6 w-6 text-white" />
                 </div>
               </div>
             </CardContent>
@@ -166,17 +169,12 @@ const History: React.FC = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-400 text-sm font-medium">Success Rate</p>
-                  <p className="text-2xl font-bold text-white mt-1">
-                    {submissions.length > 0 
-                      ? Math.round((submissions.filter(s => s.status?.toLowerCase() === 'completed').length / submissions.length) * 100)
-                      : 0
-                    }%
-                  </p>
-                  <p className="text-purple-400 text-xs mt-1">Approval rate</p>
+                  <p className="text-gray-400 text-sm font-medium">People Connected</p>
+                  <p className="text-2xl font-bold text-white mt-1">{filteredData.stats.totalPeopleConnected}</p>
+                  <p className="text-purple-400 text-xs mt-1">Network growth</p>
                 </div>
                 <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
-                  <Award className="h-6 w-6 text-white" />
+                  <Users className="h-6 w-6 text-white" />
                 </div>
               </div>
             </CardContent>
@@ -235,6 +233,25 @@ const History: React.FC = () => {
                   Pending
                 </button>
               </div>
+
+
+
+              {/* Date Range Filter */}
+              <div className="flex items-center space-x-2">
+                <input
+                  type="date"
+                  value={dateRange.start}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                  className="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
+                />
+                <span className="text-gray-400">to</span>
+                <input
+                  type="date"
+                  value={dateRange.end}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                  className="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 focus:border-blue-500 focus:outline-none"
+                />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -262,34 +279,36 @@ const History: React.FC = () => {
                       <div className="flex items-center space-x-3 mb-3">
                         {getStatusIcon(submission.status)}
                         <div>
-                          <h3 className="font-semibold text-white">{submission.task_title || 'Unknown Task'}</h3>
+                          <h3 className="font-semibold text-white">{submission.taskTitle}</h3>
                           <p className="text-gray-400 text-sm">
-                            Submitted on {new Date(submission.submitted_at || Date.now()).toLocaleDateString()}
+                            Day {submission.day} • {submission.category} • Submitted on {new Date(submission.submittedAt).toLocaleDateString()}
                           </p>
                         </div>
                       </div>
-                      
+
                       <p className="text-gray-300 text-sm mb-3 line-clamp-2">
-                        {submission.submission_text || 'No description provided'}
+                        {submission.submissionText || 'No description provided'}
                       </p>
                       
                       <div className="flex items-center space-x-4 text-sm">
                         <div className="flex items-center space-x-1">
                           <Calendar className="h-4 w-4 text-gray-400" />
                           <span className="text-gray-400">
-                            Day {submission.task_day || 'Unknown'}
+                            Completed: {new Date(submission.completedAt).toLocaleDateString()}
                           </span>
                         </div>
                         <div className="flex items-center space-x-1">
                           <Award className="h-4 w-4 text-yellow-400" />
-                          <span className="text-yellow-400">
-                            {submission.points_reward || 0} points
-                          </span>
+                          <span className="text-yellow-400">{submission.points} points</span>
                         </div>
-                        {submission.image_proof && (
+                        <div className="flex items-center space-x-1">
+                          <Users className="h-4 w-4 text-purple-400" />
+                          <span className="text-purple-400">{submission.peopleConnected} connected</span>
+                        </div>
+                        {submission.imageUrl && (
                           <div className="flex items-center space-x-1">
                             <ImageIcon className="h-4 w-4 text-blue-400" />
-                            <span className="text-blue-400">Image proof</span>
+                            <span className="text-blue-400">Image attached</span>
                           </div>
                         )}
                       </div>

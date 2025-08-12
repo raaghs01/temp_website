@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Trophy, Medal, Award, Crown, TrendingUp, Users, Star, Target, Calendar, Eye, BarChart3, PieChart, LineChart, Zap } from 'lucide-react';
+import { Trophy, Medal, Award, Crown, TrendingUp, Users, Star, Target, Eye, CheckCircle, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useTaskData } from '../../hooks/useTaskData';
 
-const BACKEND_URL = 'http://127.0.0.1:8000';
+const BACKEND_URL = 'http://127.0.0.1:5000';
 
 interface LeaderboardEntry {
   id: string;
@@ -12,33 +13,26 @@ interface LeaderboardEntry {
   college: string;
   points: number;
   tasks_completed: number;
-  people_referred: number;
+  // people_referred: number;
   avatar: string;
   trend: 'up' | 'down' | 'stable';
   last_activity: string;
 }
 
-const Leaderboard: React.FC = () => {
+interface LeaderboardProps {
+  user?: any;
+}
+
+const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
   const [period, setPeriod] = useState<'weekly' | 'monthly' | 'all_time'>('weekly');
   const [loading, setLoading] = useState(true);
   const [userRank, setUserRank] = useState<number>(0);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [modalEntry, setModalEntry] = useState<LeaderboardEntry | null>(null);
+  const { stats, completions, loading: taskLoading } = useTaskData();
 
-  // If opened with #analytics, scroll to that section after mount
-  useEffect(() => {
-    const hash = window.location.hash;
-    if (hash === '#analytics') {
-      setTimeout(() => {
-        const id = hash.replace('#', '');
-        const el = document.getElementById(id);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 0);
-    }
-  }, []);
+
 
   // Sample data
   const sampleLeaderboard: LeaderboardEntry[] = [
@@ -49,7 +43,7 @@ const Leaderboard: React.FC = () => {
       college: 'MIT',
       points: 2850,
       tasks_completed: 24,
-      people_referred: 12,
+      // people_referred: 12,
       avatar: 'SJ',
       trend: 'up',
       last_activity: '2 hours ago'
@@ -61,7 +55,7 @@ const Leaderboard: React.FC = () => {
       college: 'Stanford',
       points: 2720,
       tasks_completed: 22,
-      people_referred: 10,
+      // people_referred: 10,
       avatar: 'MC',
       trend: 'up',
       last_activity: '1 hour ago'
@@ -73,7 +67,7 @@ const Leaderboard: React.FC = () => {
       college: 'Harvard',
       points: 2580,
       tasks_completed: 20,
-      people_referred: 8,
+      // people_referred: 8,      
       avatar: 'ER',
       trend: 'stable',
       last_activity: '3 hours ago'
@@ -85,7 +79,7 @@ const Leaderboard: React.FC = () => {
       college: 'UC Berkeley',
       points: 2450,
       tasks_completed: 19,
-      people_referred: 7,
+      // people_referred: 7,
       avatar: 'DK',
       trend: 'down',
       last_activity: '5 hours ago'
@@ -97,7 +91,7 @@ const Leaderboard: React.FC = () => {
       college: 'Yale',
       points: 2320,
       tasks_completed: 18,
-      people_referred: 6,
+      // people_referred: 6,
       avatar: 'LW',
       trend: 'up',
       last_activity: '1 day ago'
@@ -109,7 +103,7 @@ const Leaderboard: React.FC = () => {
       college: 'Princeton',
       points: 2180,
       tasks_completed: 17,
-      people_referred: 5,
+      // people_referred: 5,
       avatar: 'JW',
       trend: 'stable',
       last_activity: '2 days ago'
@@ -121,7 +115,7 @@ const Leaderboard: React.FC = () => {
       college: 'Columbia',
       points: 2050,
       tasks_completed: 16,
-      people_referred: 4,
+      // people_referred: 4,
       avatar: 'MG',
       trend: 'up',
       last_activity: '1 day ago'
@@ -133,31 +127,119 @@ const Leaderboard: React.FC = () => {
       college: 'Duke',
       points: 1920,
       tasks_completed: 15,
-      people_referred: 3,
+      // people_referred: 3,
       avatar: 'AT',
       trend: 'down',
       last_activity: '3 days ago'
     }
   ];
 
+  // Function to fetch user's current rank from backend
+  const fetchUserRank = async () => {
+    if (!user) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${BACKEND_URL}/api/profile`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        if (userData.rank_position && userData.rank_position > 0) {
+          setUserRank(userData.rank_position);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user rank:', error);
+    }
+  };
+
   useEffect(() => {
     const fetchLeaderboard = async () => {
       try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setLeaderboardData(sampleLeaderboard);
-        setUserRank(15); // Simulate user rank
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setLoading(false);
+          return;
+        }
+
+        const response = await fetch(`${BACKEND_URL}/api/leaderboard?limit=20`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+
+          // Transform backend data to match frontend interface
+          const transformedData = data.map((entry: any, index: number) => ({
+            id: (index + 1).toString(),
+            rank: entry.rank,
+            name: entry.name,
+            college: entry.college,
+            points: entry.total_points,
+            tasks_completed: Math.floor(entry.total_points / 100), // Estimate based on points
+            // people_referred: entry.total_referrals,
+            avatar: entry.name.split(' ').map((n: string) => n[0]).join('').toUpperCase(),
+            trend: 'stable', // Default trend - could be enhanced with historical data
+            last_activity: 'Recently active'
+          }));
+
+          setLeaderboardData(transformedData);
+
+          // Find current user's rank using actual user data
+          let currentUserRank = 0;
+          if (user) {
+            // First try to use the rank_position from user data if available
+            if (user.rank_position && user.rank_position > 0) {
+              currentUserRank = user.rank_position;
+            } else {
+              // Fallback: find user in leaderboard data by ID or name
+              const userInLeaderboard = transformedData.findIndex((entry: any) =>
+                entry.name === user.name || entry.id === user.id
+              ) + 1;
+              currentUserRank = userInLeaderboard || 0;
+            }
+          }
+
+          // If we still don't have a rank, try to calculate it based on user's points
+          if (currentUserRank === 0 && user?.total_points) {
+            // Count how many users have more points than current user
+            const usersWithMorePoints = transformedData.filter((entry: any) =>
+              entry.points > user.total_points
+            ).length;
+            currentUserRank = usersWithMorePoints + 1;
+          }
+
+          setUserRank(currentUserRank || 0);
+        } else {
+          console.error('Failed to fetch leaderboard');
+          setLeaderboardData(sampleLeaderboard);
+          // Use user's rank_position if available, otherwise fallback
+          setUserRank(user?.rank_position || 15);
+        }
       } catch (error) {
         console.error('Error fetching leaderboard:', error);
         setLeaderboardData(sampleLeaderboard);
-        setUserRank(15);
+        // Use user's rank_position if available, otherwise fallback
+        setUserRank(user?.rank_position || 15);
       } finally {
         setLoading(false);
       }
     };
 
     fetchLeaderboard();
-  }, [period]);
+    // Also fetch user rank separately to ensure it's up to date
+    fetchUserRank();
+  }, [period, user]);
 
   const handlePeriodChange = (newPeriod: 'weekly' | 'monthly' | 'all_time') => {
     setPeriod(newPeriod);
@@ -306,8 +388,12 @@ const Leaderboard: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm font-medium">Your Rank</p>
-                  <p className="text-2xl font-bold text-white mt-1">#{userRank}</p>
-                  <p className="text-purple-400 text-xs mt-1">Keep climbing!</p>
+                  <p className="text-2xl font-bold text-white mt-1">
+                    {userRank > 0 ? `#${userRank}` : 'Unranked'}
+                  </p>
+                  <p className="text-purple-400 text-xs mt-1">
+                    {userRank > 0 ? 'Keep climbing!' : 'Complete tasks to get ranked!'}
+                  </p>
                 </div>
                 <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
                   <Star className="h-6 w-6 text-white" />
@@ -316,6 +402,118 @@ const Leaderboard: React.FC = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* User Performance Summary */}
+        {user && (
+          <Card className="bg-gradient-to-r from-purple-600 to-blue-600 border-0 mb-8">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
+                    <span className="text-2xl font-bold text-white">
+                      {user.name?.charAt(0).toUpperCase() || 'U'}
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">{user.name}</h3>
+                    <p className="text-purple-100">{user.college}</p>
+                    <div className="flex items-center space-x-4 mt-2">
+                      <span className="text-purple-200 text-sm">
+                        {user.total_points || 0} points
+                      </span>
+                      <span className="text-purple-200 text-sm">•</span>
+                      <span className="text-purple-200 text-sm">
+                        {userRank > 0 ? `Rank #${userRank}` : 'Not ranked yet'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-3xl font-bold text-white">
+                    {userRank > 0 ? `#${userRank}` : '—'}
+                  </div>
+                  <p className="text-purple-200 text-sm">
+                    {userRank > 0 ? 'Current Rank' : 'Complete tasks to rank'}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Task Completion Metrics */}
+        {!taskLoading && stats.completedTasks > 0 && (
+          <Card className="bg-gray-800 border-gray-700 mb-8">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center space-x-2">
+                <CheckCircle className="h-6 w-6 text-green-400" />
+                <span>Your Task Performance</span>
+              </CardTitle>
+              <CardDescription className="text-gray-400">
+                Your personal task completion statistics
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <CheckCircle className="h-8 w-8 text-white" />
+                  </div>
+                  <p className="text-2xl font-bold text-white">{stats.completedTasks}</p>
+                  <p className="text-gray-400 text-sm">Tasks Completed</p>
+                  <p className="text-green-400 text-xs mt-1">{stats.completionRate.toFixed(1)}% completion rate</p>
+                </div>
+
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-yellow-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <Star className="h-8 w-8 text-white" />
+                  </div>
+                  <p className="text-2xl font-bold text-white">{stats.totalPoints}</p>
+                  <p className="text-gray-400 text-sm">Total Points</p>
+                  <p className="text-yellow-400 text-xs mt-1">Avg {stats.averagePointsPerTask.toFixed(0)} per task</p>
+                </div>
+
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <Users className="h-8 w-8 text-white" />
+                  </div>
+                  <p className="text-2xl font-bold text-white">{stats.totalPeopleConnected}</p>
+                  <p className="text-gray-400 text-sm">People Connected</p>
+                  <p className="text-purple-400 text-xs mt-1">Network expansion</p>
+                </div>
+              </div>
+
+              {/* Recent Completions */}
+              {stats.recentCompletions.length > 0 && (
+                <div>
+                  <h4 className="text-white font-medium mb-3 flex items-center space-x-2">
+                    <Clock className="h-4 w-4 text-blue-400" />
+                    <span>Recent Completions</span>
+                  </h4>
+                  <div className="space-y-2">
+                    {stats.recentCompletions.slice(0, 3).map((completion) => (
+                      <div
+                        key={completion.id}
+                        className="flex items-center justify-between p-3 bg-gray-700 rounded-lg"
+                      >
+                        <div>
+                          <p className="text-white text-sm font-medium">{completion.taskTitle}</p>
+                          <p className="text-gray-400 text-xs">
+                            Day {completion.day} • {new Date(completion.completedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-yellow-400 font-medium">+{completion.points}</p>
+                          <p className="text-gray-400 text-xs">{completion.peopleConnected} connected</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Leaderboard Table Card */}
         <Card className="bg-gray-800 border-gray-700">
@@ -406,10 +604,10 @@ const Leaderboard: React.FC = () => {
                   <p className="text-gray-400">Tasks Completed</p>
                   <p className="text-white font-medium">{modalEntry?.tasks_completed}</p>
                 </div>
-                <div className="bg-gray-800 rounded-lg p-3">
-                  <p className="text-gray-400">People Referred</p>
-                  <p className="text-white font-medium">{modalEntry?.people_referred}</p>
-                </div>
+                {/* <div className="bg-gray-800 rounded-lg p-3">
+                  // {/* <p className="text-gray-400">People Referred</p> */}
+                   {/* <p className="text-white font-medium">{modalEntry?.people_referred}</p> */}
+                {/* </div> */} 
                 <div className="bg-gray-800 rounded-lg p-3">
                   <p className="text-gray-400">Trend</p>
                   <div className="flex items-center space-x-2">
@@ -435,383 +633,11 @@ const Leaderboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Analytics Section (inlined from Analytics.tsx) */}
-        <div id="analytics" className="mt-12">
-          {/* Welcome Section */}
-          <div className="mb-8">
-            <h2 className="text-3xl font-bold mb-2">Performance Analytics</h2>
-            <p className="text-gray-400">Track your growth, analyze campaign effectiveness, and optimize your ambassador strategy.</p>
-          </div>
 
-          {/* Stats Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <Card className="bg-gray-800 border-gray-700">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-400 text-sm font-medium">Total Reach</p>
-                    <p className="text-2xl font-bold text-white mt-1">12.5K</p>
-                    <p className="text-green-400 text-xs mt-1">+23% this month</p>
-                  </div>
-                  <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-                    <Users className="h-6 w-6 text-white" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
 
-            <Card className="bg-gray-800 border-gray-700">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-400 text-sm font-medium">Engagement Rate</p>
-                    <p className="text-2xl font-bold text-white mt-1">8.7%</p>
-                    <p className="text-green-400 text-xs mt-1">+5.2% vs last month</p>
-                  </div>
-                  <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center">
-                    <TrendingUp className="h-6 w-6 text-white" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-gray-800 border-gray-700">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-400 text-sm font-medium">Conversion Rate</p>
-                    <p className="text-2xl font-bold text-white mt-1">3.2%</p>
-                    <p className="text-purple-400 text-xs mt-1">Above average</p>
-                  </div>
-                  <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
-                    <Target className="h-6 w-6 text-white" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-gray-800 border-gray-700">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-400 text-sm font-medium">ROI</p>
-                    <p className="text-2xl font-bold text-white mt-1">4.8x</p>
-                    <p className="text-yellow-400 text-xs mt-1">Excellent return</p>
-                  </div>
-                  <div className="w-12 h-12 bg-yellow-600 rounded-lg flex items-center justify-center">
-                    <Award className="h-6 w-6 text-white" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Charts Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            {/* Performance Trends */}
-            <Card className="bg-gray-800 border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center space-x-2">
-                  <LineChart className="h-6 w-6 text-blue-400" />
-                  <span>Performance Trends</span>
-                </CardTitle>
-                <CardDescription className="text-gray-400">
-                  Your growth over the last 30 days
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64 bg-gray-700 rounded-lg p-4">
-                  <LeaderboardLineChart />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Campaign Distribution */}
-            <Card className="bg-gray-800 border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center space-x-2">
-                  <PieChart className="h-6 w-6 text-green-400" />
-                  <span>Campaign Distribution</span>
-                </CardTitle>
-                <CardDescription className="text-gray-400">
-                  How your efforts are distributed across campaigns
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64 bg-gray-700 rounded-lg p-4 flex items-center justify-center">
-                  <DonutChart
-                    data={[
-                      { label: 'Social Media', value: 45, color: '#60A5FA' },
-                      { label: 'Campus Outreach', value: 30, color: '#34D399' },
-                      { label: 'Events', value: 25, color: '#A78BFA' },
-                    ]}
-                    size={180}
-                    thickness={24}
-                  />
-                  <div className="ml-6 space-y-2">
-                    <LegendItem color="#60A5FA" label="Social Media" value="45%" />
-                    <LegendItem color="#34D399" label="Campus Outreach" value="30%" />
-                    <LegendItem color="#A78BFA" label="Events" value="25%" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Detailed Analytics */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            {/* Top Performing Campaigns */}
-            <Card className="bg-gray-800 border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center space-x-2">
-                  <BarChart3 className="h-6 w-6 text-purple-400" />
-                  <span>Top Campaigns</span>
-                </CardTitle>
-                <CardDescription className="text-gray-400">
-                  Your best performing campaigns
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="bg-gray-700 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium text-white">Social Media Blitz</h4>
-                      <span className="text-green-400 text-sm font-medium">+45%</span>
-                    </div>
-                    <div className="w-full bg-gray-600 rounded-full h-2">
-                      <div className="bg-green-500 h-2 rounded-full" style={{ width: '85%' }}></div>
-                    </div>
-                    <p className="text-gray-400 text-xs mt-1">2,450 engagements</p>
-                  </div>
-                  
-                  <div className="bg-gray-700 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium text-white">Campus Outreach</h4>
-                      <span className="text-blue-400 text-sm font-medium">+32%</span>
-                    </div>
-                    <div className="w-full bg-gray-600 rounded-full h-2">
-                      <div className="bg-blue-500 h-2 rounded-full" style={{ width: '72%' }}></div>
-                    </div>
-                    <p className="text-gray-400 text-xs mt-1">1,890 engagements</p>
-                  </div>
-                  
-                  <div className="bg-gray-700 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium text-white">Event Promotion</h4>
-                      <span className="text-purple-400 text-sm font-medium">+28%</span>
-                    </div>
-                    <div className="w-full bg-gray-600 rounded-full h-2">
-                      <div className="bg-purple-500 h-2 rounded-full" style={{ width: '65%' }}></div>
-                    </div>
-                    <p className="text-gray-400 text-xs mt-1">1,234 engagements</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Audience Insights */}
-            <Card className="bg-gray-800 border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center space-x-2">
-                  <Users className="h-6 w-6 text-blue-400" />
-                  <span>Audience Insights</span>
-                </CardTitle>
-                <CardDescription className="text-gray-400">
-                  Your audience demographics and behavior
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <HorizontalBars
-                  data={[
-                    { label: 'Age 18-24', value: 45, color: '#60A5FA' },
-                    { label: 'Age 25-34', value: 32, color: '#34D399' },
-                    { label: 'Age 35+', value: 23, color: '#A78BFA' },
-                  ]}
-                />
-              </CardContent>
-            </Card>
-
-            {/* Time Analysis */}
-            <Card className="bg-gray-800 border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center space-x-2">
-                  <Calendar className="h-6 w-6 text-green-400" />
-                  <span>Peak Hours</span>
-                </CardTitle>
-                <CardDescription className="text-gray-400">
-                  When your audience is most active
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <PeakHoursChart
-                  data={[
-                    { label: '9-11 AM', value: 35 },
-                    { label: '12-2 PM', value: 65 },
-                    { label: '6-9 PM', value: 90 },
-                  ]}
-                />
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Coming Soon Notice */}
-          <Card className="bg-gradient-to-r from-purple-600 to-blue-600 border-0">
-            <CardContent className="p-8 text-center">
-              <div className="flex items-center justify-center mb-4">
-                <Zap className="h-8 w-8 text-white mr-3" />
-                <h3 className="text-2xl font-bold text-white">Advanced Analytics Coming Soon!</h3>
-              </div>
-              <p className="text-purple-100 mb-6 max-w-2xl mx-auto">
-                Get ready for powerful analytics tools that will help you track performance, 
-                analyze campaign effectiveness, and optimize your ambassador strategy with 
-                real-time insights and predictive analytics.
-              </p>
-              <div className="flex items-center justify-center space-x-4">
-                <div className="bg-white/20 rounded-lg px-4 py-2">
-                  <span className="text-white text-sm font-medium">Q2 2024</span>
-                </div>
-                <div className="bg-white/20 rounded-lg px-4 py-2">
-                  <span className="text-white text-sm font-medium">AI-Powered Insights</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
       </div>
     </div>
   );
 };
 
 export default Leaderboard;
-
-// Inline lightweight SVG components for charts
-const LeaderboardLineChart: React.FC = () => {
-  const points = [20, 32, 28, 50, 46, 60, 55];
-  const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const width = 600;
-  const height = 220;
-  const padding = 32;
-  const step = (width - padding * 2) / (points.length - 1);
-  const maxVal = Math.max(...points);
-  const minVal = Math.min(...points);
-  const scaleY = (v: number) => padding + (height - padding * 2) * (1 - (v - minVal) / (maxVal - minVal || 1));
-  const poly = points.map((v, i) => `${padding + i * step},${scaleY(v)}`).join(' ');
-  const [hover, setHover] = React.useState<number | null>(null);
-  const yTicks = 4;
-  const tickVals = Array.from({ length: yTicks + 1 }, (_, i) => Math.round(minVal + (i * (maxVal - minVal)) / yTicks));
-
-  return (
-    <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
-      {tickVals.map(t => (
-        <g key={`grid-${t}`}>
-          <line x1={padding} y1={scaleY(t)} x2={width - padding} y2={scaleY(t)} stroke="#374151" strokeDasharray="4 4" />
-          <text x={padding - 8} y={scaleY(t) + 4} fontSize="10" textAnchor="end" fill="#9CA3AF">{t}</text>
-        </g>
-      ))}
-      <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#4B5563" strokeWidth={2} />
-      <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#4B5563" strokeWidth={2} />
-      {labels.map((l, i) => (
-        <text key={l} x={padding + i * step} y={height - padding + 16} fontSize="10" textAnchor="middle" fill="#9CA3AF">{l}</text>
-      ))}
-      <polyline points={`${poly} ${width - padding},${height - padding} ${padding},${height - padding}`} fill="url(#leaderGradient)" opacity={0.3} />
-      <polyline points={poly} fill="none" stroke="#60A5FA" strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" />
-      {points.map((v, i) => (
-        <g key={i} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
-          <circle cx={padding + i * step} cy={scaleY(v)} r={4} fill={hover === i ? '#FFFFFF' : '#93C5FD'} stroke="#60A5FA" strokeWidth={hover === i ? 2 : 0} />
-          {hover === i && (
-            <g>
-              <rect x={padding + i * step - 28} y={scaleY(v) - 40} width={56} height={22} rx={4} fill="#111827" stroke="#1F2937" />
-              <text x={padding + i * step} y={scaleY(v) - 25} textAnchor="middle" fontSize="10" fill="#E5E7EB">{labels[i]}: {v}</text>
-            </g>
-          )}
-        </g>
-      ))}
-      <defs>
-        <linearGradient id="leaderGradient" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#60A5FA" stopOpacity={0.6} />
-          <stop offset="100%" stopColor="#60A5FA" stopOpacity={0} />
-        </linearGradient>
-      </defs>
-    </svg>
-  );
-};
-
-const DonutChart: React.FC<{ data: { label: string; value: number; color: string }[]; size?: number; thickness?: number }> = ({ data, size = 180, thickness = 24 }) => {
-  const total = data.reduce((s, d) => s + d.value, 0) || 1;
-  const cx = size / 2;
-  const cy = size / 2;
-  const r = (size - thickness) / 2;
-  let cumulative = 0;
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      {data.map((d, i) => {
-        const start = (cumulative / total) * Math.PI * 2;
-        const end = ((cumulative + d.value) / total) * Math.PI * 2;
-        cumulative += d.value;
-        const large = end - start > Math.PI ? 1 : 0;
-        const x1 = cx + r * Math.cos(start);
-        const y1 = cy + r * Math.sin(start);
-        const x2 = cx + r * Math.cos(end);
-        const y2 = cy + r * Math.sin(end);
-        return (
-          <g key={i}>
-            <path d={`M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`} stroke={d.color} strokeWidth={thickness} fill="none" />
-          </g>
-        );
-      })}
-      <circle cx={cx} cy={cy} r={r - thickness / 2} fill="#111827" />
-    </svg>
-  );
-};
-
-const LegendItem: React.FC<{ color: string; label: string; value: string }> = ({ color, label, value }) => (
-  <div className="flex items-center space-x-2">
-    <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: color }} />
-    <span className="text-gray-200 text-sm">{label}</span>
-    <span className="text-gray-400 text-xs">{value}</span>
-  </div>
-);
-
-const HorizontalBars: React.FC<{ data: { label: string; value: number; color: string }[] }> = ({ data }) => {
-  const max = Math.max(...data.map(d => d.value)) || 1;
-  return (
-    <div className="space-y-3">
-      {data.map((d) => (
-        <div key={d.label} className="bg-gray-700 rounded-lg p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-gray-300 text-sm">{d.label}</span>
-            <span className="text-white text-sm font-medium">{d.value}%</span>
-          </div>
-          <div className="w-full bg-gray-600 rounded-full h-2">
-            <div className="h-2 rounded-full" style={{ width: `${Math.round((d.value / max) * 100)}%`, backgroundColor: d.color }} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-const PeakHoursChart: React.FC<{ data: { label: string; value: number }[] }> = ({ data }) => {
-  const width = 600;
-  const height = 200;
-  const padding = 40;
-  const barWidth = (width - padding * 2) / data.length - 20;
-  const max = Math.max(...data.map(d => d.value)) || 1;
-  return (
-    <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}> 
-      {data.map((d, i) => {
-        const h = ((d.value / max) * (height - padding * 2)) || 0;
-        const x = padding + i * (barWidth + 20);
-        const y = height - padding - h;
-        const color = i === 2 ? '#34D399' : i === 1 ? '#F59E0B' : '#EF4444';
-        return (
-          <g key={d.label}>
-            <rect x={x} y={y} width={barWidth} height={h} rx={6} fill={color} />
-            <text x={x + barWidth / 2} y={height - padding + 16} textAnchor="middle" fontSize="10" fill="#9CA3AF">{d.label}</text>
-          </g>
-        );
-      })}
-      <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#4B5563" strokeWidth={2} />
-    </svg>
-  );
-};

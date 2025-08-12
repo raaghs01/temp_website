@@ -1,5 +1,6 @@
 import React from 'react';
 import { User } from '../../types';
+import { LogOut } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
@@ -17,10 +18,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user, logout
     // { id: 'analytics', label: 'Analytics', icon: '📊' },
     { id: 'reports', label: 'Reports', icon: '📈' },
     // { id: 'messages', label: 'Messages', icon: '💬' },
-    { id: 'events', label: 'Events', icon: '📅' },
-    { id: 'history', label: 'History', icon: '⏰' },
+    // { id: 'history', label: 'History', icon: '⏰' },
     { id: 'profile', label: 'Profile', icon: '👤' },
-    { id: 'settings', label: 'Settings', icon: '⚙️' },
   ];
 
   return (
@@ -76,8 +75,18 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user, logout
             <p className="text-xs text-gray-400 truncate">
               {user?.college || 'College'}
             </p>
-            
           </div>
+          <button
+            onClick={() => {
+              if (window.confirm('Are you sure you want to sign out?')) {
+                logout();
+              }
+            }}
+            className="text-gray-400 hover:text-red-400 transition-colors p-1 rounded"
+            title="Sign Out"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </div>

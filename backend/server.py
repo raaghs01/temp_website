@@ -53,6 +53,7 @@ class User(BaseModel):
     password_hash: str
     name: str
     college: str
+    group_leader_name: str = ""
     role: str = "ambassador"  # "ambassador" or "admin"
     current_day: int = 0
     total_points: int = 0
@@ -66,6 +67,7 @@ class UserCreate(BaseModel):
     password: str
     name: str
     college: str
+    group_leader_name: str = ""
     role: str = "ambassador"
 
 class UserLogin(BaseModel):
@@ -104,6 +106,7 @@ class UserProfile(BaseModel):
     email: str
     name: str
     college: str
+    group_leader_name: str
     role: str
     current_day: int
     total_points: int
@@ -234,6 +237,7 @@ async def register(user_data: UserCreate):
         password_hash=hash_password(user_data.password),
         name=user_data.name,
         college=user_data.college,
+        group_leader_name=user_data.group_leader_name,
         role=user_data.role
     )
     
@@ -253,6 +257,7 @@ async def register(user_data: UserCreate):
             email=user.email,
             name=user.name,
             college=user.college,
+            group_leader_name=user.group_leader_name,
             role=user.role,
             current_day=user.current_day,
             total_points=user.total_points,
@@ -293,6 +298,7 @@ async def login(login_data: UserLogin):
             email=user.email,
             name=user.name,
             college=user.college,
+            group_leader_name=user.group_leader_name,
             role=user.role,
             current_day=user.current_day,
             total_points=user.total_points,
@@ -310,6 +316,7 @@ async def get_profile(current_user: User = Depends(get_current_user)):
         email=current_user.email,
         name=current_user.name,
         college=current_user.college,
+        group_leader_name=current_user.group_leader_name,
         role=current_user.role,
         current_day=current_user.current_day,
         total_points=current_user.total_points,
@@ -317,6 +324,30 @@ async def get_profile(current_user: User = Depends(get_current_user)):
         rank_position=rank,
         registration_date=current_user.registration_date
     )
+
+class ProfileUpdateRequest(BaseModel):
+    name: str
+    email: str
+    college: str
+    group_leader_name: str
+
+@api_router.put("/profile")
+async def update_profile(
+    data: ProfileUpdateRequest,
+    current_user: User = Depends(get_current_user)
+):
+    # Update user profile in database
+    await db.users.update_one(
+        {"id": current_user.id},
+        {"$set": {
+            "name": data.name,
+            "email": data.email,
+            "college": data.college,
+            "group_leader_name": data.group_leader_name
+        }}
+    )
+
+    return {"message": "Profile updated successfully"}
 
 @api_router.get("/tasks/{day}")
 async def get_task_for_day(day: int, current_user: User = Depends(get_current_user)):
@@ -694,7 +725,7 @@ class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
 
-@api_router.post("/api/change-password")
+@api_router.post("/change-password")
 async def change_password(
     data: ChangePasswordRequest,
     current_user: User = Depends(get_current_user)
@@ -713,3 +744,7 @@ async def change_password(
     )
 
     return {"message": "Password changed successfully"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=5000, log_level="info")

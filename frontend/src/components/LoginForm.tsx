@@ -25,7 +25,8 @@ const LoginForm: React.FC<LoginFormProps> = ({
     email: '',
     password: '',
     name: '',
-    college: ''
+    college: '',
+    groupLeaderName: ''
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -37,7 +38,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
     }
 
     if (!isLogin) {
-      if (!formData.name || !formData.college) {
+      if (!formData.name || !formData.college || !formData.groupLeaderName) {
         return false;
       }
 
@@ -115,6 +116,20 @@ const LoginForm: React.FC<LoginFormProps> = ({
                     onChange={handleChange}
                     required
                     placeholder="Enter your full name"
+                    className="w-full"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    Group Leader Name *
+                  </label>
+                  <Input
+                    type="text"
+                    name="groupLeaderName"
+                    value={formData.groupLeaderName}
+                    onChange={handleChange}
+                    required
+                    placeholder="Enter group leader name"
                     className="w-full"
                   />
                 </div>
