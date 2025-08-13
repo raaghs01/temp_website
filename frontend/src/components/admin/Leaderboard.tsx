@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  Trophy, 
-  Users, 
-  Award, 
+import {
+  Trophy,
+  Users,
+  Award,
   TrendingUp,
   Eye,
   Ban,
   UserCheck,
   Send,
-  Download,
-  Filter,
-  MoreVertical
+  Download
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +19,7 @@ interface Ambassador {
   name: string;
   email: string;
   college: string;
+  group_leader_name: string;
   avatar?: string;
   rank: number;
   points: number;
@@ -40,6 +39,8 @@ interface LeaderboardStats {
   avg_completion_rate: number;
 }
 
+const BACKEND_URL = 'http://127.0.0.1:5000';
+
 const Leaderboard: React.FC = () => {
   const [ambassadors, setAmbassadors] = useState<Ambassador[]>([]);
   const [stats, setStats] = useState<LeaderboardStats | null>(null);
@@ -47,6 +48,8 @@ const Leaderboard: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<'weekly' | 'monthly' | 'alltime'>('monthly');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'suspended'>('all');
+  const [groupLeaderFilter, setGroupLeaderFilter] = useState<string>('all');
+  const [groupLeaders, setGroupLeaders] = useState<string[]>([]);
   const [selectedAmbassador, setSelectedAmbassador] = useState<Ambassador | null>(null);
   const [showAmbassadorModal, setShowAmbassadorModal] = useState(false);
 
@@ -64,6 +67,7 @@ const Leaderboard: React.FC = () => {
       name: 'Ananya Sharma',
       email: 'ananya@college.edu',
       college: 'IIT Delhi',
+      group_leader_name: 'Dr. Rajesh Kumar',
       rank: 1,
       points: 2250,
       tasks_completed: 45,
@@ -79,6 +83,7 @@ const Leaderboard: React.FC = () => {
       name: 'Rahul Kumar',
       email: 'rahul@college.edu',
       college: 'IIT Bombay',
+      group_leader_name: 'Prof. Meera Singh',
       rank: 2,
       points: 2100,
       tasks_completed: 42,
@@ -94,6 +99,7 @@ const Leaderboard: React.FC = () => {
       name: 'Priya Patel',
       email: 'priya@college.edu',
       college: 'IIT Madras',
+      group_leader_name: 'Dr. Rajesh Kumar',
       rank: 3,
       points: 1950,
       tasks_completed: 38,
@@ -109,6 +115,7 @@ const Leaderboard: React.FC = () => {
       name: 'Arjun Singh',
       email: 'arjun@college.edu',
       college: 'IIT Kanpur',
+      group_leader_name: 'Prof. Meera Singh',
       rank: 4,
       points: 1800,
       tasks_completed: 35,
@@ -124,6 +131,7 @@ const Leaderboard: React.FC = () => {
       name: 'Sneha Reddy',
       email: 'sneha@college.edu',
       college: 'IIT Hyderabad',
+      group_leader_name: 'Dr. Amit Sharma',
       rank: 5,
       points: 1650,
       tasks_completed: 32,
@@ -139,6 +147,7 @@ const Leaderboard: React.FC = () => {
       name: 'Vikram Joshi',
       email: 'vikram@college.edu',
       college: 'IIT Roorkee',
+      group_leader_name: 'Dr. Amit Sharma',
       rank: 6,
       points: 1500,
       tasks_completed: 28,
@@ -154,6 +163,7 @@ const Leaderboard: React.FC = () => {
       name: 'Kavya Nair',
       email: 'kavya@college.edu',
       college: 'IIT Guwahati',
+      group_leader_name: 'Prof. Sunita Patel',
       rank: 7,
       points: 1350,
       tasks_completed: 25,
@@ -169,13 +179,91 @@ const Leaderboard: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setStats(sampleStats);
-        setAmbassadors(sampleAmbassadors);
+        setLoading(true);
+        const token = localStorage.getItem('token');
+
+        if (!token) {
+          console.error('No token found');
+          setStats(sampleStats);
+          setAmbassadors(sampleAmbassadors);
+          // Extract group leaders from sample data
+          const leaders = Array.from(new Set(sampleAmbassadors.map(amb => amb.group_leader_name)));
+          setGroupLeaders(leaders);
+          return;
+        }
+
+        // Fetch ambassadors data
+        const ambassadorsResponse = await fetch(`${BACKEND_URL}/api/admin/ambassadors`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        // Fetch group leaders
+        const groupLeadersResponse = await fetch(`${BACKEND_URL}/api/admin/group-leaders`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (ambassadorsResponse.ok && groupLeadersResponse.ok) {
+          const ambassadorsData = await ambassadorsResponse.json();
+          const groupLeadersData = await groupLeadersResponse.json();
+
+          // Transform ambassador data to match our interface
+          const transformedAmbassadors: Ambassador[] = ambassadorsData.map((amb: any, index: number) => ({
+            id: amb.id,
+            name: amb.name,
+            email: amb.email,
+            college: amb.college,
+            group_leader_name: amb.group_leader_name || 'No Group Leader',
+            rank: amb.rank_position || index + 1,
+            points: amb.total_points || 0,
+            tasks_completed: amb.campaign_days || 0,
+            people_referred: amb.total_referrals || 0,
+            last_activity: amb.last_activity || amb.join_date || 'Unknown',
+            status: amb.status === 'active' ? 'active' : 'inactive',
+            completion_rate: Math.min(100, Math.max(0, (amb.total_points || 0) / Math.max(1, amb.campaign_days || 1) * 2)),
+            growth_trend: amb.total_points > 100 ? 'up' : amb.total_points > 50 ? 'stable' : 'down',
+            weekly_change: Math.floor(Math.random() * 20) - 10 // Mock data for weekly change
+          }));
+
+          // Sort by points (descending) and assign ranks
+          transformedAmbassadors.sort((a, b) => b.points - a.points);
+          transformedAmbassadors.forEach((amb, index) => {
+            amb.rank = index + 1;
+          });
+
+          setAmbassadors(transformedAmbassadors);
+          setGroupLeaders(groupLeadersData);
+
+          // Calculate stats
+          const activeAmbassadors = transformedAmbassadors.filter(amb => amb.status === 'active');
+          const calculatedStats: LeaderboardStats = {
+            total_ambassadors: transformedAmbassadors.length,
+            active_this_week: activeAmbassadors.length,
+            total_points_awarded: transformedAmbassadors.reduce((sum, amb) => sum + amb.points, 0),
+            avg_completion_rate: transformedAmbassadors.reduce((sum, amb) => sum + amb.completion_rate, 0) / Math.max(1, transformedAmbassadors.length)
+          };
+
+          setStats(calculatedStats);
+        } else {
+          console.error('Failed to fetch data');
+          setStats(sampleStats);
+          setAmbassadors(sampleAmbassadors);
+          // Extract group leaders from sample data
+          const leaders = Array.from(new Set(sampleAmbassadors.map(amb => amb.group_leader_name)));
+          setGroupLeaders(leaders);
+        }
       } catch (error) {
         console.error('Error fetching leaderboard:', error);
         setStats(sampleStats);
         setAmbassadors(sampleAmbassadors);
+        // Extract group leaders from sample data
+        const leaders = Array.from(new Set(sampleAmbassadors.map(amb => amb.group_leader_name)));
+        setGroupLeaders(leaders);
       } finally {
         setLoading(false);
       }
@@ -201,12 +289,16 @@ const Leaderboard: React.FC = () => {
 
   const filteredAmbassadors = ambassadors.filter(ambassador => {
     const matchesSearch = ambassador.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         ambassador.college.toLowerCase().includes(searchTerm.toLowerCase());
+                         ambassador.college.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         ambassador.group_leader_name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || ambassador.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesGroupLeader = groupLeaderFilter === 'all' || ambassador.group_leader_name === groupLeaderFilter;
+    return matchesSearch && matchesStatus && matchesGroupLeader;
   });
 
-  const handleAmbassadorAction = (ambassador: Ambassador, action: string) => {
+  const handleAmbassadorAction = async (ambassador: Ambassador, action: string) => {
+    const token = localStorage.getItem('token');
+
     switch (action) {
       case 'view':
         setSelectedAmbassador(ambassador);
@@ -214,15 +306,61 @@ const Leaderboard: React.FC = () => {
         break;
       case 'suspend':
         if (confirm(`Are you sure you want to suspend ${ambassador.name}?`)) {
-          setAmbassadors(ambassadors.map(a => 
-            a.id === ambassador.id ? { ...a, status: 'suspended' as const } : a
-          ));
+          try {
+            const response = await fetch(`${BACKEND_URL}/api/admin/suspend-user`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                user_id: ambassador.id,
+                status: 'suspended'
+              })
+            });
+
+            if (response.ok) {
+              setAmbassadors(ambassadors.map(a =>
+                a.id === ambassador.id ? { ...a, status: 'suspended' as const } : a
+              ));
+              alert(`${ambassador.name} has been suspended successfully.`);
+            } else {
+              const errorData = await response.json();
+              alert(`Failed to suspend user: ${errorData.detail || 'Unknown error'}`);
+            }
+          } catch (error) {
+            console.error('Error suspending user:', error);
+            alert('Failed to suspend user. Please try again.');
+          }
         }
         break;
       case 'activate':
-        setAmbassadors(ambassadors.map(a => 
-          a.id === ambassador.id ? { ...a, status: 'active' as const } : a
-        ));
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/admin/activate-user`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              user_id: ambassador.id,
+              status: 'active'
+            })
+          });
+
+          if (response.ok) {
+            setAmbassadors(ambassadors.map(a =>
+              a.id === ambassador.id ? { ...a, status: 'active' as const } : a
+            ));
+            alert(`${ambassador.name} has been activated successfully.`);
+          } else {
+            const errorData = await response.json();
+            alert(`Failed to activate user: ${errorData.detail || 'Unknown error'}`);
+          }
+        } catch (error) {
+          console.error('Error activating user:', error);
+          alert('Failed to activate user. Please try again.');
+        }
         break;
       case 'message':
         alert(`Sending message to ${ambassador.name}`);
@@ -319,12 +457,35 @@ const Leaderboard: React.FC = () => {
           <Card className="bg-gray-800 border-gray-700">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-400 text-sm font-medium">Avg Completion</p>
-                  <p className="text-2xl font-bold text-white mt-1">{stats?.avg_completion_rate}%</p>
-                  <p className="text-purple-400 text-xs mt-1">Network average</p>
+                <div className="flex-1">
+                  <p className="text-gray-400 text-sm font-medium">Avg Completion Rate</p>
+                  <p className="text-2xl font-bold text-white mt-1">{stats?.avg_completion_rate?.toFixed(1)}%</p>
+                  <p className="text-purple-400 text-xs mt-1">Network performance</p>
+
+                  {/* Progress Bar */}
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-gray-400">Performance Level</span>
+                      <span className="text-xs text-gray-300">
+                        {stats?.avg_completion_rate && stats.avg_completion_rate >= 80 ? 'Excellent' :
+                         stats?.avg_completion_rate && stats.avg_completion_rate >= 60 ? 'Good' :
+                         stats?.avg_completion_rate && stats.avg_completion_rate >= 40 ? 'Average' : 'Needs Improvement'}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-700 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full transition-all duration-500 ${
+                          stats?.avg_completion_rate && stats.avg_completion_rate >= 80 ? 'bg-gradient-to-r from-green-500 to-emerald-400' :
+                          stats?.avg_completion_rate && stats.avg_completion_rate >= 60 ? 'bg-gradient-to-r from-blue-500 to-cyan-400' :
+                          stats?.avg_completion_rate && stats.avg_completion_rate >= 40 ? 'bg-gradient-to-r from-yellow-500 to-orange-400' :
+                          'bg-gradient-to-r from-red-500 to-pink-400'
+                        }`}
+                        style={{ width: `${Math.min(100, stats?.avg_completion_rate || 0)}%` }}
+                      ></div>
+                    </div>
+                  </div>
                 </div>
-                <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
+                <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center ml-4">
                   <Trophy className="h-6 w-6 text-white" />
                 </div>
               </div>
@@ -335,7 +496,8 @@ const Leaderboard: React.FC = () => {
         {/* Filters */}
         <Card className="bg-gray-800 border-gray-700 mb-6">
           <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+            <div className="flex flex-col gap-4">
+              {/* Status Filter Buttons */}
               <div className="flex flex-wrap gap-2">
                 {(['all', 'active', 'inactive', 'suspended'] as const).map((status) => (
                   <button
@@ -351,16 +513,33 @@ const Leaderboard: React.FC = () => {
                   </button>
                 ))}
               </div>
-              <div className="flex items-center space-x-4">
-                <Input
-                  placeholder="Search ambassadors..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-64 bg-gray-700 border-gray-600 text-white"
-                />
-                <Button variant="outline" className="border-gray-600 text-gray-300">
-                  <Filter className="h-4 w-4" />
-                </Button>
+
+              {/* Search and Group Leader Filter */}
+              <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+                  <div className="flex items-center space-x-2">
+                    <label className="text-sm font-medium text-gray-300 whitespace-nowrap">Group Leader:</label>
+                    <select
+                      value={groupLeaderFilter}
+                      onChange={(e) => setGroupLeaderFilter(e.target.value)}
+                      className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[200px]"
+                    >
+                      <option value="all">All Group Leaders</option>
+                      {groupLeaders.map(leader => (
+                        <option key={leader} value={leader}>{leader}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex items-center">
+                  <Input
+                    placeholder="Search ambassadors..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-64 bg-gray-700 border-gray-600 text-white"
+                  />
+                </div>
               </div>
             </div>
           </CardContent>
@@ -379,6 +558,7 @@ const Leaderboard: React.FC = () => {
                   <tr className="border-b border-gray-700">
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Rank</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Ambassador</th>
+                    <th className="text-left py-3 px-4 text-gray-300 font-medium">Group Leader</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Status</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Trend</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Actions</th>
@@ -407,6 +587,13 @@ const Leaderboard: React.FC = () => {
                             <p className="text-white font-medium">{ambassador.name}</p>
                             <p className="text-gray-400 text-sm">{ambassador.email}</p>
                           </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center">
+                          <span className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-medium">
+                            {ambassador.group_leader_name}
+                          </span>
                         </div>
                       </td>
                       <td className="py-3 px-4">
@@ -484,6 +671,11 @@ const Leaderboard: React.FC = () => {
                         <h4 className="text-white font-bold text-xl">{selectedAmbassador.name}</h4>
                         <p className="text-gray-400">{selectedAmbassador.email}</p>
                         <p className="text-gray-400">{selectedAmbassador.college}</p>
+                        <div className="mt-2">
+                          <span className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-medium">
+                            {selectedAmbassador.group_leader_name}
+                          </span>
+                        </div>
                       </div>
                     </div>
                     

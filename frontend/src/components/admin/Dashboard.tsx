@@ -26,6 +26,8 @@ interface AdminDashboardStats {
   active_ambassadors: number;
   total_tasks_assigned: number;
   tasks_completed_today: number;
+  total_tasks_submitted: number;
+  tasks_submitted_this_week: number;
   total_points_distributed: number;
   pending_approvals: number;
   system_health: number;
@@ -37,6 +39,7 @@ interface Ambassador {
   name: string;
   email: string;
   college: string;
+  group_leader_name: string;
   status: 'active' | 'inactive' | 'suspended';
   tasks_completed: number;
   total_points: number;
@@ -70,6 +73,8 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
     active_ambassadors: 128,
     total_tasks_assigned: 2175,
     tasks_completed_today: 89,
+    total_tasks_submitted: 1847,
+    tasks_submitted_this_week: 456,
     total_points_distributed: 125600,
     pending_approvals: 23,
     system_health: 96,
@@ -82,6 +87,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
       name: 'Ananya Sharma',
       email: 'ananya@college.edu',
       college: 'IIT Delhi',
+      group_leader_name: 'Dr. Rajesh Kumar',
       status: 'active',
       tasks_completed: 45,
       total_points: 2250,
@@ -94,6 +100,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
       name: 'Rahul Kumar',
       email: 'rahul@college.edu',
       college: 'IIT Bombay',
+      group_leader_name: 'Prof. Meera Singh',
       status: 'active',
       tasks_completed: 42,
       total_points: 2100,
@@ -106,6 +113,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
       name: 'Priya Patel',
       email: 'priya@college.edu',
       college: 'IIT Madras',
+      group_leader_name: 'Dr. Amit Sharma',
       status: 'inactive',
       tasks_completed: 15,
       total_points: 750,
@@ -118,6 +126,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
       name: 'Arjun Singh',
       email: 'arjun@college.edu',
       college: 'IIT Kanpur',
+      group_leader_name: 'Prof. Sunita Patel',
       status: 'active',
       tasks_completed: 38,
       total_points: 1900,
@@ -130,6 +139,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
       name: 'Sneha Reddy',
       email: 'sneha@college.edu',
       college: 'IIT Hyderabad',
+      group_leader_name: 'Dr. Kavya Nair',
       status: 'suspended',
       tasks_completed: 8,
       total_points: 400,
@@ -204,23 +214,27 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
             active_ambassadors: statsData.active_ambassadors,
             total_tasks_assigned: ambassadorsData.length * 10, // Estimate
             tasks_completed_today: Math.floor(statsData.total_ambassadors * 0.3), // Estimate
+            total_tasks_submitted: ambassadorsData.reduce((sum: number, amb: any) => sum + (amb.campaign_days || 0), 0),
+            tasks_submitted_this_week: Math.floor(ambassadorsData.reduce((sum: number, amb: any) => sum + (amb.campaign_days || 0), 0) * 0.25), // Estimate 25% of total tasks in last week
             total_points_distributed: ambassadorsData.reduce((sum: number, amb: any) => sum + amb.total_points, 0),
             pending_approvals: Math.floor(statsData.active_ambassadors * 0.1), // Estimate
             system_health: 98, // Static for now
-            avg_completion_rate: statsData.average_engagement_rate
+            avg_completion_rate: statsData.average_engagement_rate || 78.5
           };
 
           // Transform ambassadors data
-          const transformedAmbassadors = ambassadorsData.slice(0, 5).map((amb: any) => ({
+          const transformedAmbassadors = ambassadorsData.slice(0, 5).map((amb: any, index: number) => ({
             id: amb.id,
             name: amb.name,
             email: amb.email,
             college: amb.college,
-            points: amb.total_points,
-            tasks_completed: Math.floor(amb.total_points / 100),
+            group_leader_name: amb.group_leader_name || 'No Group Leader',
             status: amb.status || 'active',
-            last_activity: amb.last_activity || 'Recently active',
-            join_date: amb.join_date || new Date().toISOString().split('T')[0]
+            tasks_completed: Math.floor(amb.total_points / 100),
+            total_points: amb.total_points,
+            rank: index + 1,
+            last_active: amb.last_activity || 'Recently active',
+            completion_rate: Math.min(100, Math.max(0, (amb.total_points || 0) / Math.max(1, Math.floor(amb.total_points / 100) || 1) * 2))
           }));
 
           setDashboardStats(transformedStats);
@@ -247,17 +261,71 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
 
 
 
-  const handleAmbassadorAction = (ambassador: Ambassador, action: string) => {
+  const handleAmbassadorAction = async (ambassador: Ambassador, action: string) => {
+    const token = localStorage.getItem('token');
+
     switch (action) {
       case 'view':
         setSelectedAmbassador(ambassador);
         setShowAmbassadorModal(true);
         break;
       case 'suspend':
-        alert(`Suspending ${ambassador.name}`);
+        if (confirm(`Are you sure you want to suspend ${ambassador.name}?`)) {
+          try {
+            const response = await fetch(`${BACKEND_URL}/api/admin/suspend-user`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                user_id: ambassador.id,
+                status: 'suspended'
+              })
+            });
+
+            if (response.ok) {
+              setAmbassadors(ambassadors.map(a =>
+                a.id === ambassador.id ? { ...a, status: 'suspended' as const } : a
+              ));
+              alert(`${ambassador.name} has been suspended successfully.`);
+            } else {
+              const errorData = await response.json();
+              alert(`Failed to suspend user: ${errorData.detail || 'Unknown error'}`);
+            }
+          } catch (error) {
+            console.error('Error suspending user:', error);
+            alert('Failed to suspend user. Please try again.');
+          }
+        }
         break;
       case 'activate':
-        alert(`Activating ${ambassador.name}`);
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/admin/activate-user`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              user_id: ambassador.id,
+              status: 'active'
+            })
+          });
+
+          if (response.ok) {
+            setAmbassadors(ambassadors.map(a =>
+              a.id === ambassador.id ? { ...a, status: 'active' as const } : a
+            ));
+            alert(`${ambassador.name} has been activated successfully.`);
+          } else {
+            const errorData = await response.json();
+            alert(`Failed to activate user: ${errorData.detail || 'Unknown error'}`);
+          }
+        } catch (error) {
+          console.error('Error activating user:', error);
+          alert('Failed to activate user. Please try again.');
+        }
         break;
       case 'message':
         alert(`Sending message to ${ambassador.name}`);
@@ -310,107 +378,100 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
           <p className="text-gray-400">Monitor and manage your ambassador network from this central dashboard.</p>
         </div>
 
-        {/* System Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        {/* System Stats Grid - All Metrics in One Row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-8">
           <Card className="bg-gray-800 border-gray-700 hover:bg-gray-750 transition-colors">
-            <CardContent className="p-6">
+            <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-400 text-sm font-medium">Total Ambassadors</p>
-                  <p className="text-2xl font-bold text-white mt-1">{dashboardStats?.total_ambassadors || 0}</p>
+                  <p className="text-gray-400 text-xs font-medium">Total Ambassadors</p>
+                  <p className="text-xl font-bold text-white mt-1">{dashboardStats?.total_ambassadors || 0}</p>
                   <p className="text-blue-400 text-xs mt-1">{dashboardStats?.active_ambassadors || 0} active</p>
                 </div>
-                <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <Users className="h-6 w-6 text-white" />
+                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <Users className="h-5 w-5 text-white" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card className="bg-gray-800 border-gray-700 hover:bg-gray-750 transition-colors">
-            <CardContent className="p-6">
+            <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-400 text-sm font-medium">Tasks Completed Today</p>
-                  <p className="text-2xl font-bold text-white mt-1">{dashboardStats?.tasks_completed_today || 0}</p>
+                  <p className="text-gray-400 text-xs font-medium">Tasks Today</p>
+                  <p className="text-xl font-bold text-white mt-1">{dashboardStats?.tasks_completed_today || 0}</p>
                   <p className="text-green-400 text-xs mt-1">+15% from yesterday</p>
                 </div>
-                <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center">
-                  <CheckCircle className="h-6 w-6 text-white" />
+                <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
+                  <CheckCircle className="h-5 w-5 text-white" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card className="bg-gray-800 border-gray-700 hover:bg-gray-750 transition-colors">
-            <CardContent className="p-6">
+            <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-400 text-sm font-medium">Points Distributed</p>
-                  <p className="text-2xl font-bold text-white mt-1">{dashboardStats?.total_points_distributed?.toLocaleString() || 0}</p>
+                  <p className="text-gray-400 text-xs font-medium">Total Tasks</p>
+                  <p className="text-xl font-bold text-white mt-1">{dashboardStats?.total_tasks_submitted?.toLocaleString() || 0}</p>
+                  <p className="text-purple-400 text-xs mt-1">All time total</p>
+                </div>
+                <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
+                  <FileText className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* <Card className="bg-gray-800 border-gray-700 hover:bg-gray-750 transition-colors">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-400 text-xs font-medium">Tasks This Week</p>
+                  <p className="text-xl font-bold text-white mt-1">{dashboardStats?.tasks_submitted_this_week || 0}</p>
+                  <p className="text-cyan-400 text-xs mt-1">Last 7 days</p>
+                </div>
+                <div className="w-10 h-10 bg-cyan-600 rounded-lg flex items-center justify-center">
+                  <Calendar className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card> */}
+
+          <Card className="bg-gray-800 border-gray-700 hover:bg-gray-750 transition-colors">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-400 text-xs font-medium">Points Distributed</p>
+                  <p className="text-xl font-bold text-white mt-1">{dashboardStats?.total_points_distributed?.toLocaleString() || 0}</p>
                   <p className="text-yellow-400 text-xs mt-1">All time total</p>
                 </div>
-                <div className="w-12 h-12 bg-yellow-600 rounded-lg flex items-center justify-center">
-                  <Award className="h-6 w-6 text-white" />
+                <div className="w-10 h-10 bg-yellow-600 rounded-lg flex items-center justify-center">
+                  <Award className="h-5 w-5 text-white" />
                 </div>
               </div>
             </CardContent>
           </Card>
-        </div>
 
-        {/* Analytics and Management Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* System Analytics */}
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-white">System Performance</CardTitle>
-              <CardDescription className="text-gray-400">Overall ambassador network analytics</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
+          {/* <Card className="bg-gray-800 border-gray-700 hover:bg-gray-750 transition-colors">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-300">Average Completion Rate</span>
-                    <span className="text-sm font-medium text-white">{dashboardStats?.avg_completion_rate || 0}%</span>
-                  </div>
-                  <div className="w-full bg-gray-700 rounded-full h-3">
-                    <div 
-                      className="bg-gradient-to-r from-green-500 to-blue-500 h-3 rounded-full transition-all duration-500"
-                      style={{ width: `${dashboardStats?.avg_completion_rate || 0}%` }}
-                    ></div>
-                  </div>
+                  <p className="text-gray-400 text-xs font-medium">Completion Rate</p>
+                  <p className="text-xl font-bold text-white mt-1">{dashboardStats?.avg_completion_rate || 0}%</p>
+                  <p className="text-green-400 text-xs mt-1">Network average</p>
                 </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-gray-700 rounded-lg p-4 text-center">
-                    <AlertTriangle className="h-8 w-8 text-yellow-400 mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-white">{dashboardStats?.pending_approvals || 0}</p>
-                    <p className="text-gray-400 text-sm">Pending Approvals</p>
-                  </div>
-                  
-                  <div className="bg-gray-700 rounded-lg p-4 text-center">
-                    <FileText className="h-8 w-8 text-blue-400 mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-white">{dashboardStats?.total_tasks_assigned || 0}</p>
-                    <p className="text-gray-400 text-sm">Total Tasks</p>
-                  </div>
+                <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
+                  <BarChart3 className="h-5 w-5 text-white" />
                 </div>
               </div>
             </CardContent>
-          </Card>
-
-          {/* Performance Chart */}
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-white">Network Performance Trends</CardTitle>
-              <CardDescription className="text-gray-400">Weekly completion rates</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64 bg-gray-700 rounded-lg p-4">
-                <AdminAnalyticsChart />
-              </div>
-            </CardContent>
-          </Card>
+          </Card> */}
         </div>
+
+
 
         {/* Ambassador Management Table */}
         <Card className="bg-gray-800 border-gray-700 mb-8">
@@ -420,10 +481,10 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                 <CardTitle className="text-white">Ambassador Management</CardTitle>
                 <CardDescription className="text-gray-400">Monitor and control ambassador activities</CardDescription>
               </div>
-              <Button className="bg-blue-600 hover:bg-blue-700">
+              {/* <Button className="bg-blue-600 hover:bg-blue-700">
                 <UserCheck className="h-4 w-4 mr-2" />
                 Add Ambassador
-              </Button>
+              </Button> */}
             </div>
           </CardHeader>
           <CardContent>
@@ -432,6 +493,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                 <thead>
                   <tr className="border-b border-gray-700">
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Ambassador</th>
+                    <th className="text-left py-3 px-4 text-gray-300 font-medium">Group Leader</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Status</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Tasks</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Actions</th>
@@ -450,6 +512,11 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                             <p className="text-gray-400 text-sm">{ambassador.email}</p>
                           </div>
                         </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-medium">
+                          {ambassador.group_leader_name}
+                        </span>
                       </td>
                       <td className="py-3 px-4">
                         <span className={`capitalize ${getStatusColor(ambassador.status)}`}>
@@ -590,94 +657,3 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
 };
 
 export default Dashboard;
-
-// Admin Analytics Chart Component
-const AdminAnalyticsChart: React.FC = () => {
-  const labels = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-  const completionRates = [65, 72, 78, 85];
-  const activeUsers = [120, 125, 132, 128];
-  
-  const width = 600;
-  const height = 180;
-  const padding = 32;
-  const step = (width - padding * 2) / (labels.length - 1);
-  
-  const maxCompletion = Math.max(...completionRates);
-  const minCompletion = Math.min(...completionRates);
-  const maxActive = Math.max(...activeUsers);
-  const minActive = Math.min(...activeUsers);
-  
-  const scaleY1 = (value: number) => {
-    if (maxCompletion === minCompletion) return height / 2;
-    return padding + (height - padding * 2) * (1 - (value - minCompletion) / (maxCompletion - minCompletion));
-  };
-  
-  const scaleY2 = (value: number) => {
-    if (maxActive === minActive) return height / 2;
-    return padding + (height - padding * 2) * (1 - (value - minActive) / (maxActive - minActive));
-  };
-
-  const completionPoints = completionRates
-    .map((v, i) => `${padding + i * step},${scaleY1(v)}`)
-    .join(' ');
-    
-  const activePoints = activeUsers
-    .map((v, i) => `${padding + i * step},${scaleY2(v)}`)
-    .join(' ');
-
-  return (
-    <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
-      {/* Grid lines */}
-      <defs>
-        <linearGradient id="completionGradient" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#10B981" stopOpacity={0.6} />
-          <stop offset="100%" stopColor="#10B981" stopOpacity={0} />
-        </linearGradient>
-        <linearGradient id="activeGradient" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.6} />
-          <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
-        </linearGradient>
-      </defs>
-      
-      {/* Axes */}
-      <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#4B5563" strokeWidth={2} />
-      <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#4B5563" strokeWidth={2} />
-
-      {/* X labels */}
-      {labels.map((label, i) => (
-        <text key={label} x={padding + i * step} y={height - padding + 16} textAnchor="middle" fontSize="10" fill="#9CA3AF">
-          {label}
-        </text>
-      ))}
-
-      {/* Completion rate line */}
-      <polyline
-        points={`${completionPoints} ${width - padding},${height - padding} ${padding},${height - padding}`}
-        fill="url(#completionGradient)"
-        stroke="none"
-        opacity={0.3}
-      />
-      <polyline points={completionPoints} fill="none" stroke="#10B981" strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" />
-
-      {/* Active users line */}
-      <polyline points={activePoints} fill="none" stroke="#3B82F6" strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" strokeDasharray="5,5" />
-
-      {/* Points */}
-      {completionRates.map((v, i) => (
-        <circle key={`completion-${i}`} cx={padding + i * step} cy={scaleY1(v)} r={4} fill="#10B981" stroke="#065F46" strokeWidth={2} />
-      ))}
-      
-      {activeUsers.map((v, i) => (
-        <circle key={`active-${i}`} cx={padding + i * step} cy={scaleY2(v)} r={4} fill="#3B82F6" stroke="#1E40AF" strokeWidth={2} />
-      ))}
-
-      {/* Legend */}
-      <g transform="translate(450, 30)">
-        <circle cx={0} cy={0} r={3} fill="#10B981" />
-        <text x={10} y={4} fontSize="10" fill="#9CA3AF">Completion Rate</text>
-        <circle cx={0} cy={15} r={3} fill="#3B82F6" />
-        <text x={10} y={19} fontSize="10" fill="#9CA3AF">Active Users</text>
-      </g>
-    </svg>
-  );
-};

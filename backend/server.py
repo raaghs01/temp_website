@@ -60,6 +60,7 @@ class User(BaseModel):
     total_referrals: int = 0
     registration_date: datetime = Field(default_factory=datetime.utcnow)
     is_active: bool = True
+    status: str = "active"  # "active", "inactive", "suspended"
     rank_position: Optional[int] = None
 
 class UserCreate(BaseModel):
@@ -114,6 +115,7 @@ class UserProfile(BaseModel):
     total_referrals: int
     rank_position: Optional[int]
     registration_date: datetime
+    status: str
 
 class LeaderboardEntry(BaseModel):
     name: str
@@ -142,12 +144,22 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         user_id = payload.get("user_id")
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
-        
+
         user = await db.users.find_one({"id": user_id})
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
-        
-        return User(**user)
+
+        user_obj = User(**user)
+
+        # Check if user is suspended (only for non-admin users)
+        if user_obj.role != "admin" and user_obj.status == "suspended":
+            raise HTTPException(status_code=403, detail="Your account has been suspended. Please contact support.")
+
+        # Check if user is inactive
+        if not user_obj.is_active:
+            raise HTTPException(status_code=403, detail="Your account is inactive. Please contact support.")
+
+        return user_obj
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.JWTError:
@@ -264,7 +276,8 @@ async def register(user_data: UserCreate):
             total_points=user.total_points,
             total_referrals=user.total_referrals,
             rank_position=rank,
-            registration_date=user.registration_date
+            registration_date=user.registration_date,
+            status=user.status
         )
     }
 
@@ -274,23 +287,31 @@ async def login(login_data: UserLogin):
     user_data = await db.users.find_one({"email": login_data.email})
     if not user_data:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
+
     user = User(**user_data)
-    
+
     # Verify password
     if not verify_password(login_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
+
     # Verify role matches
     if user.role != login_data.role:
         raise HTTPException(status_code=401, detail="Invalid role for this account")
-    
+
+    # Check if user is suspended
+    if user.status == "suspended":
+        raise HTTPException(status_code=403, detail="Your account has been suspended. Please contact support.")
+
+    # Check if user is inactive
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Your account is inactive. Please contact support.")
+
     # Create access token
     token = create_access_token(user.id)
-    
+
     # Calculate current rank
     rank = await calculate_user_rank(user.id)
-    
+
     return {
         "message": "Login successful",
         "token": token,
@@ -305,7 +326,8 @@ async def login(login_data: UserLogin):
             total_points=user.total_points,
             total_referrals=user.total_referrals,
             rank_position=rank,
-            registration_date=user.registration_date
+            registration_date=user.registration_date,
+            status=user.status
         )
     }
 
@@ -323,7 +345,8 @@ async def get_profile(current_user: User = Depends(get_current_user)):
         total_points=current_user.total_points,
         total_referrals=current_user.total_referrals,
         rank_position=rank,
-        registration_date=current_user.registration_date
+        registration_date=current_user.registration_date,
+        status=current_user.status
     )
 
 class ProfileUpdateRequest(BaseModel):
@@ -789,16 +812,17 @@ async def get_ambassadors(current_user: User = Depends(get_current_user)):
     # Check if user is admin
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Access denied. Admin role required.")
-    
+
     # Get all ambassador users
     ambassadors = await db.users.find({"role": "ambassador", "is_active": True}).to_list(1000)
-    
+
     return [
         {
             "id": ambassador["id"],
             "name": ambassador["name"],
             "email": ambassador["email"],
             "college": ambassador["college"],
+            "group_leader_name": ambassador.get("group_leader_name", ""),
             "total_points": ambassador.get("total_points", 0),
             "rank_position": ambassador.get("rank_position"),
             "current_day": ambassador.get("current_day", 0),
@@ -810,12 +834,112 @@ async def get_ambassadors(current_user: User = Depends(get_current_user)):
             "engagement_rate": ambassador.get("total_points", 0) / max(ambassador.get("current_day", 1), 1),
             "followers_growth": ambassador.get("total_referrals", 0) * 2,  # Simplified calculation
             "campaign_days": ambassador.get("current_day", 0),
-            "status": "active" if ambassador.get("is_active", True) else "inactive",
+            "status": ambassador.get("status", "active"),
             "last_activity": ambassador.get("registration_date", datetime.utcnow()).isoformat(),
             "join_date": ambassador.get("registration_date", datetime.utcnow()).isoformat()
         }
         for ambassador in ambassadors
     ]
+
+@api_router.get("/admin/group-leaders")
+async def get_group_leaders(current_user: User = Depends(get_current_user)):
+    # Check if user is admin
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied. Admin role required.")
+
+    # Get all unique group leaders from ambassador users
+    ambassadors = await db.users.find({"role": "ambassador", "is_active": True}).to_list(1000)
+
+    group_leaders = set()
+    for ambassador in ambassadors:
+        group_leader = ambassador.get("group_leader_name", "").strip()
+        if group_leader:  # Only add non-empty group leader names
+            group_leaders.add(group_leader)
+
+    return sorted(list(group_leaders))
+
+@api_router.get("/admin/ambassadors-by-group-leader")
+async def get_ambassadors_by_group_leader(group_leader: str, current_user: User = Depends(get_current_user)):
+    # Check if user is admin
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied. Admin role required.")
+
+    # Get ambassadors filtered by group leader
+    ambassadors = await db.users.find({
+        "role": "ambassador",
+        "is_active": True,
+        "group_leader_name": group_leader
+    }).to_list(1000)
+
+    return [
+        {
+            "id": ambassador["id"],
+            "name": ambassador["name"],
+            "email": ambassador["email"],
+            "college": ambassador["college"],
+            "group_leader_name": ambassador.get("group_leader_name", ""),
+            "total_points": ambassador.get("total_points", 0),
+            "rank_position": ambassador.get("rank_position"),
+            "current_day": ambassador.get("current_day", 0),
+            "total_referrals": ambassador.get("total_referrals", 0),
+            "events_hosted": int(ambassador.get("total_points", 0) / 50),
+            "students_reached": ambassador.get("total_referrals", 0),
+            "revenue_generated": ambassador.get("total_points", 0) * 0.1,
+            "social_media_posts": int(ambassador.get("total_points", 0) / 10),
+            "engagement_rate": ambassador.get("total_points", 0) / max(ambassador.get("current_day", 1), 1),
+            "followers_growth": ambassador.get("total_referrals", 0) * 2,
+            "campaign_days": ambassador.get("current_day", 0),
+            "status": ambassador.get("status", "active"),
+            "last_activity": ambassador.get("registration_date", datetime.utcnow()).isoformat(),
+            "join_date": ambassador.get("registration_date", datetime.utcnow()).isoformat()
+        }
+        for ambassador in ambassadors
+    ]
+
+# Admin endpoints for user management
+class UserStatusUpdateRequest(BaseModel):
+    user_id: str
+    status: str  # "active", "inactive", "suspended"
+
+@api_router.post("/admin/suspend-user")
+async def suspend_user(
+    data: UserStatusUpdateRequest,
+    current_user: User = Depends(get_current_user)
+):
+    # Check if user is admin
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied. Admin role required.")
+
+    # Update user status to suspended
+    result = await db.users.update_one(
+        {"id": data.user_id},
+        {"$set": {"status": "suspended"}}
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {"message": "User suspended successfully"}
+
+@api_router.post("/admin/activate-user")
+async def activate_user(
+    data: UserStatusUpdateRequest,
+    current_user: User = Depends(get_current_user)
+):
+    # Check if user is admin
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied. Admin role required.")
+
+    # Update user status to active
+    result = await db.users.update_one(
+        {"id": data.user_id},
+        {"$set": {"status": "active"}}
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {"message": "User activated successfully"}
 
 # Change password endpoint
 class ChangePasswordRequest(BaseModel):

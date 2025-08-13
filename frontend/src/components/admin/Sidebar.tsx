@@ -11,15 +11,15 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user, logout }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '🏠' },
-    { id: 'ambassadors', label: 'Ambassadors', icon: '👥' },
+    // { id: 'ambassadors', label: 'Ambassadors', icon: '👥' },
     { id: 'leaderboard', label: 'Leaderboard', icon: '🏆' },
     // { id: 'analytics', label: 'Analytics', icon: '📊' },
     { id: 'reports', label: 'Reports', icon: '📈' },
     // { id: 'messages', label: 'Messages', icon: '💬' },
-    { id: 'events', label: 'Events', icon: '📅' },
+    // { id: 'events', label: 'Events', icon: '📅' },
     // { id: 'history', label: 'Activity Log', icon: '⏰' },
     { id: 'profile', label: 'Profile', icon: '👤' },
-    { id: 'settings', label: 'Settings', icon: '⚙️' },
+    // { id: 'settings', label: 'Settings', icon: '⚙️' },
   ];
 
   return (

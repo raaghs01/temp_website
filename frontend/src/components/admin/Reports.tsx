@@ -1,178 +1,448 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  Download, 
-  FileText, 
-  Calendar, 
+import {
+  Download,
+  FileText,
+  Calendar,
   TrendingUp,
   Users,
   Award,
   BarChart3,
   PieChart,
   Filter,
-  RefreshCw
+  RefreshCw,
+  CheckCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import * as XLSX from 'xlsx';
+
+const BACKEND_URL = 'http://127.0.0.1:5000';
+
+interface Ambassador {
+  id: string;
+  name: string;
+  email: string;
+  college: string;
+  group_leader_name: string;
+  total_points: number;
+  rank_position?: number;
+  current_day: number;
+  total_referrals: number;
+  events_hosted: number;
+  students_reached: number;
+  revenue_generated: number;
+  social_media_posts: number;
+  engagement_rate: number;
+  followers_growth: number;
+  campaign_days: number;
+  status: string;
+  last_activity: string;
+  join_date: string;
+}
+
+interface TaskSubmission {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  submissionText: string;
+  imageUrl?: string;
+  submittedAt: string;
+  completedAt?: string;
+  status: 'completed';
+  points: number;
+  peopleConnected?: number;
+  category?: string;
+  priority?: string;
+  user_id: string;
+  user_name: string;
+  user_college: string;
+  user_group_leader: string;
+}
 
 interface ReportData {
-  id: string;
-  title: string;
-  description: string;
-  type: 'performance' | 'engagement' | 'financial' | 'activity';
-  generated_date: string;
-  period: string;
-  file_size: string;
-  status: 'ready' | 'generating' | 'failed';
+  totalAmbassadors: number;
+  totalTasks: number;
+  totalPoints: number;
+  totalPeopleConnected: number;
+  averageTaskTime: string;
+  completionRate: number;
+  submissions: TaskSubmission[];
+  monthlyProgress: { month: string; tasks: number; points: number }[];
+  ambassadors: Ambassador[];
 }
 
 interface SystemMetrics {
-  total_reports: number;
-  reports_this_month: number;
-  automated_reports: number;
-  data_processed: string;
+  total_ambassadors: number;
+  active_ambassadors: number;
+  total_submissions: number;
+  total_points: number;
 }
 
 const Reports: React.FC = () => {
-  const [reports, setReports] = useState<ReportData[]>([]);
+  const [reportData, setReportData] = useState<ReportData | null>(null);
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedType, setSelectedType] = useState<'all' | 'performance' | 'engagement' | 'financial' | 'activity'>('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [groupLeaders, setGroupLeaders] = useState<string[]>([]);
+  const [selectedGroupLeader, setSelectedGroupLeader] = useState<string>('all');
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
-  const sampleMetrics: SystemMetrics = {
-    total_reports: 156,
-    reports_this_month: 24,
-    automated_reports: 12,
-    data_processed: '2.4 GB'
-  };
+  // Fetch data from backend
+  const fetchReportData = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
 
-  const sampleReports: ReportData[] = [
-    {
-      id: 'rpt_001',
-      title: 'Monthly Performance Summary',
-      description: 'Comprehensive analysis of ambassador performance, task completion rates, and point distribution',
-      type: 'performance',
-      generated_date: '2024-01-15',
-      period: 'January 2024',
-      file_size: '2.3 MB',
-      status: 'ready'
-    },
-    {
-      id: 'rpt_002',
-      title: 'Engagement Analytics Report',
-      description: 'User engagement metrics, activity patterns, and retention analysis',
-      type: 'engagement',
-      generated_date: '2024-01-14',
-      period: 'Last 30 days',
-      file_size: '1.8 MB',
-      status: 'ready'
-    },
-    {
-      id: 'rpt_003',
-      title: 'Points & Rewards Analysis',
-      description: 'Financial overview of points distribution, reward redemptions, and cost analysis',
-      type: 'financial',
-      generated_date: '2024-01-13',
-      period: 'Q4 2023',
-      file_size: '3.1 MB',
-      status: 'ready'
-    },
-    {
-      id: 'rpt_004',
-      title: 'System Activity Logs',
-      description: 'Detailed system activity, user actions, and security events',
-      type: 'activity',
-      generated_date: '2024-01-12',
-      period: 'Last 7 days',
-      file_size: '4.7 MB',
-      status: 'ready'
-    },
-    {
-      id: 'rpt_005',
-      title: 'College Performance Comparison',
-      description: 'Comparative analysis of performance across different colleges and institutions',
-      type: 'performance',
-      generated_date: 'Processing...',
-      period: 'Last 6 months',
-      file_size: '--',
-      status: 'generating'
+      if (!token) {
+        console.error('No token found');
+        return;
+      }
+
+      // Fetch ambassadors data
+      const ambassadorsResponse = await fetch(`${BACKEND_URL}/api/admin/ambassadors`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      // Fetch group leaders
+      const groupLeadersResponse = await fetch(`${BACKEND_URL}/api/admin/group-leaders`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (ambassadorsResponse.ok && groupLeadersResponse.ok) {
+        const ambassadors: Ambassador[] = await ambassadorsResponse.json();
+        const leaders: string[] = await groupLeadersResponse.json();
+
+        setGroupLeaders(leaders);
+
+        // Filter ambassadors by selected group leader
+        const filteredAmbassadors = selectedGroupLeader === 'all'
+          ? ambassadors
+          : ambassadors.filter(amb => amb.group_leader_name === selectedGroupLeader);
+
+        // Calculate metrics
+        const totalTasks = filteredAmbassadors.reduce((sum, amb) => sum + amb.campaign_days, 0);
+        const totalPoints = filteredAmbassadors.reduce((sum, amb) => sum + amb.total_points, 0);
+        const totalPeopleConnected = filteredAmbassadors.reduce((sum, amb) => sum + amb.students_reached, 0);
+
+        // Create mock submissions data based on ambassador data
+        const submissions: TaskSubmission[] = [];
+        filteredAmbassadors.forEach(ambassador => {
+          // Create mock submissions for each ambassador based on their campaign days
+          for (let day = 1; day <= ambassador.campaign_days; day++) {
+            const submissionDate = new Date();
+            submissionDate.setDate(submissionDate.getDate() - (ambassador.campaign_days - day));
+
+            submissions.push({
+              id: `sub_${ambassador.id}_${day}`,
+              taskId: `task_${day}`,
+              taskTitle: `Day ${day} Task`,
+              submissionText: `Task completion for day ${day} by ${ambassador.name}`,
+              submittedAt: submissionDate.toISOString(),
+              completedAt: submissionDate.toISOString(),
+              status: 'completed',
+              points: Math.floor(ambassador.total_points / Math.max(ambassador.campaign_days, 1)),
+              peopleConnected: Math.floor(ambassador.students_reached / Math.max(ambassador.campaign_days, 1)),
+              category: 'General',
+              priority: 'medium',
+              user_id: ambassador.id,
+              user_name: ambassador.name,
+              user_college: ambassador.college,
+              user_group_leader: ambassador.group_leader_name
+            });
+          }
+        });
+
+        // Calculate monthly progress
+        const monthlyProgress: { month: string; tasks: number; points: number }[] = [];
+        const monthlyData: { [key: string]: { tasks: number; points: number } } = {};
+
+        submissions.forEach(sub => {
+          const date = new Date(sub.submittedAt);
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+          if (!monthlyData[monthKey]) {
+            monthlyData[monthKey] = { tasks: 0, points: 0 };
+          }
+
+          monthlyData[monthKey].tasks += 1;
+          monthlyData[monthKey].points += sub.points;
+        });
+
+        Object.entries(monthlyData).forEach(([month, data]) => {
+          monthlyProgress.push({
+            month,
+            tasks: data.tasks,
+            points: data.points
+          });
+        });
+
+        const processedReportData: ReportData = {
+          totalAmbassadors: filteredAmbassadors.length,
+          totalTasks: totalTasks,
+          totalPoints: totalPoints,
+          totalPeopleConnected: totalPeopleConnected,
+          averageTaskTime: '2.5 hours',
+          completionRate: 100,
+          submissions: submissions,
+          monthlyProgress: monthlyProgress.sort((a, b) => a.month.localeCompare(b.month)),
+          ambassadors: filteredAmbassadors
+        };
+
+        setReportData(processedReportData);
+
+        // Set metrics
+        setMetrics({
+          total_ambassadors: ambassadors.length,
+          active_ambassadors: ambassadors.filter(amb => amb.status === 'active').length,
+          total_submissions: submissions.length,
+          total_points: ambassadors.reduce((sum, amb) => sum + amb.total_points, 0)
+        });
+      } else {
+        console.error('Failed to fetch data');
+      }
+    } catch (error) {
+      console.error('Error fetching report data:', error);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setMetrics(sampleMetrics);
-        setReports(sampleReports);
-      } catch (error) {
-        console.error('Error fetching reports:', error);
-        setMetrics(sampleMetrics);
-        setReports(sampleReports);
-      } finally {
-        setLoading(false);
+    fetchReportData();
+  }, [selectedGroupLeader]);
+
+  // Export functions
+  const exportToExcel = () => {
+    if (!reportData) return;
+
+    const workbook = XLSX.utils.book_new();
+
+    // Summary Sheet
+    const summaryData = [
+      ['Admin Ambassador Report', ''],
+      ['Generated on:', new Date().toLocaleDateString()],
+      ['Group Leader Filter:', selectedGroupLeader === 'all' ? 'All Group Leaders' : selectedGroupLeader],
+      ['Date Range:', dateRange.start && dateRange.end ? `${dateRange.start} to ${dateRange.end}` : 'All Time'],
+      ['', ''],
+      ['Summary Statistics', ''],
+      ['Total Ambassadors', reportData.totalAmbassadors],
+      ['Total Tasks Completed', reportData.totalTasks],
+      ['Total Points Earned', reportData.totalPoints],
+      ['Total People Connected', reportData.totalPeopleConnected],
+      ['Average Task Time', reportData.averageTaskTime],
+      ['Completion Rate', `${reportData.completionRate}%`],
+      ['', ''],
+      ['Ambassador Overview', ''],
+      ['Name', 'College', 'Group Leader', 'Total Points', 'Tasks Completed', 'People Reached', 'Status'],
+      ...reportData.ambassadors.map(amb => [
+        amb.name,
+        amb.college,
+        amb.group_leader_name,
+        amb.total_points,
+        amb.campaign_days,
+        amb.students_reached,
+        amb.status
+      ])
+    ];
+
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+
+    // Detailed Submissions Sheet
+    const submissionsData = [
+      [
+        'Ambassador Name',
+        'College',
+        'Group Leader',
+        'Task ID',
+        'Task Title',
+        'Priority',
+        'Submission Date',
+        'Submission Time',
+        'Completion Date',
+        'Completion Time',
+        'Points Earned',
+        'People Connected',
+        'Submission Status',
+        'Full Submission Text',
+        'Week of Year',
+        'Month',
+        'Quarter'
+      ],
+      ...reportData.submissions.map(sub => {
+        const submissionDate = new Date(sub.submittedAt);
+        const completionDate = sub.completedAt ? new Date(sub.completedAt) : submissionDate;
+        const weekOfYear = Math.ceil((submissionDate.getTime() - new Date(submissionDate.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000));
+        const quarter = Math.ceil((submissionDate.getMonth() + 1) / 3);
+
+        return [
+          sub.user_name,
+          sub.user_college,
+          sub.user_group_leader,
+          sub.taskId,
+          sub.taskTitle,
+          sub.priority || 'Medium',
+          submissionDate.toLocaleDateString(),
+          submissionDate.toLocaleTimeString(),
+          completionDate.toLocaleDateString(),
+          completionDate.toLocaleTimeString(),
+          sub.points,
+          sub.peopleConnected || 0,
+          sub.status,
+          sub.submissionText,
+          weekOfYear,
+          submissionDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+          `Q${quarter} ${submissionDate.getFullYear()}`
+        ];
+      })
+    ];
+
+    const submissionsSheet = XLSX.utils.aoa_to_sheet(submissionsData);
+    XLSX.utils.book_append_sheet(workbook, submissionsSheet, 'Detailed Submissions');
+
+    // Monthly Progress Sheet
+    const monthlyData = [
+      ['Monthly Progress Analysis', ''],
+      ['Month', 'Tasks Completed', 'Points Earned', 'Average Points per Task'],
+      ...reportData.monthlyProgress.map(month => [
+        month.month,
+        month.tasks,
+        month.points,
+        month.tasks > 0 ? Math.round(month.points / month.tasks) : 0
+      ])
+    ];
+
+    const monthlySheet = XLSX.utils.aoa_to_sheet(monthlyData);
+    XLSX.utils.book_append_sheet(workbook, monthlySheet, 'Monthly Progress');
+
+    // Group Leader Performance Sheet
+    const groupLeaderStats: { [key: string]: { ambassadors: number; totalPoints: number; totalTasks: number; totalPeople: number } } = {};
+
+    reportData.ambassadors.forEach(amb => {
+      const leader = amb.group_leader_name || 'No Group Leader';
+      if (!groupLeaderStats[leader]) {
+        groupLeaderStats[leader] = { ambassadors: 0, totalPoints: 0, totalTasks: 0, totalPeople: 0 };
       }
+      groupLeaderStats[leader].ambassadors += 1;
+      groupLeaderStats[leader].totalPoints += amb.total_points;
+      groupLeaderStats[leader].totalTasks += amb.campaign_days;
+      groupLeaderStats[leader].totalPeople += amb.students_reached;
+    });
+
+    const groupLeaderData = [
+      ['Group Leader Performance Analysis', ''],
+      ['Group Leader', 'Ambassadors', 'Total Points', 'Total Tasks', 'Total People Reached', 'Avg Points per Ambassador', 'Avg Tasks per Ambassador'],
+      ...Object.entries(groupLeaderStats).map(([leader, stats]) => [
+        leader,
+        stats.ambassadors,
+        stats.totalPoints,
+        stats.totalTasks,
+        stats.totalPeople,
+        stats.ambassadors > 0 ? Math.round(stats.totalPoints / stats.ambassadors) : 0,
+        stats.ambassadors > 0 ? Math.round(stats.totalTasks / stats.ambassadors) : 0
+      ])
+    ];
+
+    const groupLeaderSheet = XLSX.utils.aoa_to_sheet(groupLeaderData);
+    XLSX.utils.book_append_sheet(workbook, groupLeaderSheet, 'Group Leader Performance');
+
+    // Auto-size columns for all sheets
+    [summarySheet, submissionsSheet, monthlySheet, groupLeaderSheet].forEach(sheet => {
+      const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
+      const columnWidths = [];
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        let maxWidth = 10;
+        for (let row = range.s.r; row <= range.e.r; row++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+          const cell = sheet[cellAddress];
+          if (cell && cell.v) {
+            const cellLength = cell.v.toString().length;
+            maxWidth = Math.max(maxWidth, cellLength);
+          }
+        }
+        columnWidths.push({ wch: Math.min(maxWidth + 2, 50) });
+      }
+      sheet['!cols'] = columnWidths;
+    });
+
+    // Generate and download file
+    const fileName = selectedGroupLeader === 'all'
+      ? `Admin_Ambassador_Report_All_Groups_${new Date().toISOString().split('T')[0]}.xlsx`
+      : `Admin_Ambassador_Report_${selectedGroupLeader.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    XLSX.writeFile(workbook, fileName);
+  };
+
+  const exportToCSV = () => {
+    if (!reportData) return;
+
+    const csvData = [
+      ['Ambassador Name', 'College', 'Group Leader', 'Task ID', 'Task Title', 'Submission Date', 'Points', 'People Connected', 'Status'],
+      ...reportData.submissions.map(sub => [
+        sub.user_name,
+        sub.user_college,
+        sub.user_group_leader,
+        sub.taskId,
+        sub.taskTitle,
+        new Date(sub.submittedAt).toLocaleDateString(),
+        sub.points,
+        sub.peopleConnected || 0,
+        sub.status
+      ])
+    ];
+
+    const csvContent = csvData.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+
+    const fileName = selectedGroupLeader === 'all'
+      ? `Admin_Ambassador_Report_All_Groups_${new Date().toISOString().split('T')[0]}.csv`
+      : `Admin_Ambassador_Report_${selectedGroupLeader.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+
+    link.download = fileName;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const exportToJSON = () => {
+    if (!reportData) return;
+
+    const jsonData = {
+      generated_on: new Date().toISOString(),
+      group_leader_filter: selectedGroupLeader,
+      date_range: dateRange,
+      summary: {
+        totalAmbassadors: reportData.totalAmbassadors,
+        totalTasks: reportData.totalTasks,
+        totalPoints: reportData.totalPoints,
+        totalPeopleConnected: reportData.totalPeopleConnected,
+        completionRate: reportData.completionRate
+      },
+      ambassadors: reportData.ambassadors,
+      submissions: reportData.submissions,
+      monthlyProgress: reportData.monthlyProgress
     };
 
-    fetchData();
-  }, []);
+    const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
 
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'performance': return 'text-blue-400 bg-blue-900/20';
-      case 'engagement': return 'text-green-400 bg-green-900/20';
-      case 'financial': return 'text-yellow-400 bg-yellow-900/20';
-      case 'activity': return 'text-purple-400 bg-purple-900/20';
-      default: return 'text-gray-400 bg-gray-900/20';
-    }
-  };
+    const fileName = selectedGroupLeader === 'all'
+      ? `Admin_Ambassador_Report_All_Groups_${new Date().toISOString().split('T')[0]}.json`
+      : `Admin_Ambassador_Report_${selectedGroupLeader.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.json`;
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'ready': return 'text-green-400';
-      case 'generating': return 'text-yellow-400';
-      case 'failed': return 'text-red-400';
-      default: return 'text-gray-400';
-    }
-  };
-
-  const filteredReports = reports.filter(report => {
-    const matchesType = selectedType === 'all' || report.type === selectedType;
-    const matchesSearch = report.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         report.description.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesType && matchesSearch;
-  });
-
-  const handleDownload = (report: ReportData) => {
-    if (report.status === 'ready') {
-      alert(`Downloading ${report.title}...`);
-    }
-  };
-
-  const generateReport = (type: string, period: string) => {
-    const newReport: ReportData = {
-      id: `rpt_${Date.now()}`,
-      title: `Custom ${type.charAt(0).toUpperCase() + type.slice(1)} Report`,
-      description: `Generated ${type} report for ${period}`,
-      type: type as any,
-      generated_date: 'Processing...',
-      period: period,
-      file_size: '--',
-      status: 'generating'
-    };
-    setReports([newReport, ...reports]);
-    setShowGenerateModal(false);
-    
-    // Simulate report generation
-    setTimeout(() => {
-      setReports(prev => prev.map(r => 
-        r.id === newReport.id 
-          ? { ...r, status: 'ready', generated_date: new Date().toISOString().split('T')[0], file_size: '2.1 MB' }
-          : r
-      ));
-    }, 3000);
+    link.download = fileName;
+    link.click();
+    window.URL.revokeObjectURL(url);
   };
 
   if (loading) {
@@ -183,25 +453,46 @@ const Reports: React.FC = () => {
     );
   }
 
+  const exportOptions = [
+    {
+      name: 'Excel',
+      description: 'Comprehensive multi-sheet report with ambassador analysis',
+      color: 'bg-green-600',
+      status: 'Most Detailed',
+      details: '4 sheets: Summary, detailed submissions, monthly progress, group leader performance'
+    },
+    {
+      name: 'CSV',
+      description: 'Ambassador task data ready for analysis',
+      color: 'bg-blue-600',
+      status: 'Analysis Ready',
+      details: 'Includes ambassador info, submission details, and performance metrics'
+    },
+    {
+      name: 'JSON',
+      description: 'Complete structured data with all ambassador information',
+      color: 'bg-purple-600',
+      status: 'Developer Friendly',
+      details: 'Full ambassador and submission data in structured JSON format'
+    }
+  ];
+
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Header */}
       <div className="flex items-center justify-between p-6 border-b border-gray-800">
         <div className="flex items-center space-x-4">
-          <h1 className="text-2xl font-bold">System Reports</h1>
+          <h1 className="text-2xl font-bold">Ambassador Reports</h1>
         </div>
-        
+
         <div className="flex items-center space-x-4">
-          <Button 
-            onClick={() => setShowGenerateModal(true)}
-            className="bg-blue-600 hover:bg-blue-700"
+          <Button
+            onClick={fetchReportData}
+            variant="outline"
+            className="border-gray-600 text-gray-300"
           >
-            <FileText className="h-4 w-4 mr-2" />
-            Generate Report
-          </Button>
-          <Button variant="outline" className="border-gray-600 text-gray-300">
             <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
+            Refresh Data
           </Button>
         </div>
       </div>
@@ -214,12 +505,12 @@ const Reports: React.FC = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-400 text-sm font-medium">Total Reports</p>
-                  <p className="text-2xl font-bold text-white mt-1">{metrics?.total_reports}</p>
-                  <p className="text-blue-400 text-xs mt-1">All time</p>
+                  <p className="text-gray-400 text-sm font-medium">Total Ambassadors</p>
+                  <p className="text-2xl font-bold text-white mt-1">{metrics?.total_ambassadors || 0}</p>
+                  <p className="text-blue-400 text-xs mt-1">All ambassadors</p>
                 </div>
                 <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <FileText className="h-6 w-6 text-white" />
+                  <Users className="h-6 w-6 text-white" />
                 </div>
               </div>
             </CardContent>
@@ -229,9 +520,9 @@ const Reports: React.FC = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-400 text-sm font-medium">This Month</p>
-                  <p className="text-2xl font-bold text-white mt-1">{metrics?.reports_this_month}</p>
-                  <p className="text-green-400 text-xs mt-1">Generated reports</p>
+                  <p className="text-gray-400 text-sm font-medium">Active Ambassadors</p>
+                  <p className="text-2xl font-bold text-white mt-1">{metrics?.active_ambassadors || 0}</p>
+                  <p className="text-green-400 text-xs mt-1">Currently active</p>
                 </div>
                 <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center">
                   <TrendingUp className="h-6 w-6 text-white" />
@@ -244,12 +535,12 @@ const Reports: React.FC = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-400 text-sm font-medium">Automated</p>
-                  <p className="text-2xl font-bold text-white mt-1">{metrics?.automated_reports}</p>
-                  <p className="text-purple-400 text-xs mt-1">Scheduled reports</p>
+                  <p className="text-gray-400 text-sm font-medium">Total Submissions</p>
+                  <p className="text-2xl font-bold text-white mt-1">{metrics?.total_submissions || 0}</p>
+                  <p className="text-purple-400 text-xs mt-1">Task submissions</p>
                 </div>
                 <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
-                  <Calendar className="h-6 w-6 text-white" />
+                  <CheckCircle className="h-6 w-6 text-white" />
                 </div>
               </div>
             </CardContent>
@@ -259,12 +550,12 @@ const Reports: React.FC = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-gray-400 text-sm font-medium">Data Processed</p>
-                  <p className="text-2xl font-bold text-white mt-1">{metrics?.data_processed}</p>
-                  <p className="text-yellow-400 text-xs mt-1">Total volume</p>
+                  <p className="text-gray-400 text-sm font-medium">Total Points</p>
+                  <p className="text-2xl font-bold text-white mt-1">{metrics?.total_points || 0}</p>
+                  <p className="text-yellow-400 text-xs mt-1">Points earned</p>
                 </div>
                 <div className="w-12 h-12 bg-yellow-600 rounded-lg flex items-center justify-center">
-                  <BarChart3 className="h-6 w-6 text-white" />
+                  <Award className="h-6 w-6 text-white" />
                 </div>
               </div>
             </CardContent>
@@ -274,142 +565,199 @@ const Reports: React.FC = () => {
         {/* Filters */}
         <Card className="bg-gray-800 border-gray-700 mb-6">
           <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-              <div className="flex flex-wrap gap-2">
-                {(['all', 'performance', 'engagement', 'financial', 'activity'] as const).map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => setSelectedType(type)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      selectedType === type
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    }`}
-                  >
-                    {type.charAt(0).toUpperCase() + type.slice(1)}
-                  </button>
-                ))}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Group Leader</label>
+                <select
+                  value={selectedGroupLeader}
+                  onChange={(e) => setSelectedGroupLeader(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Group Leaders</option>
+                  {groupLeaders.map(leader => (
+                    <option key={leader} value={leader}>{leader}</option>
+                  ))}
+                </select>
               </div>
-              <div className="flex items-center space-x-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Start Date</label>
                 <Input
-                  placeholder="Search reports..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-64 bg-gray-700 border-gray-600 text-white"
+                  type="date"
+                  value={dateRange.start}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                  className="bg-gray-700 border-gray-600 text-white"
                 />
-                <Button variant="outline" className="border-gray-600 text-gray-300">
-                  <Filter className="h-4 w-4" />
-                </Button>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">End Date</label>
+                <Input
+                  type="date"
+                  value={dateRange.end}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                  className="bg-gray-700 border-gray-600 text-white"
+                />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Reports List */}
-        <Card className="bg-gray-800 border-gray-700">
+        {/* Export Options */}
+        <Card className="bg-gray-800 border-gray-700 mb-8">
           <CardHeader>
-            <CardTitle className="text-white">Generated Reports</CardTitle>
-            <CardDescription className="text-gray-400">Download and manage system reports</CardDescription>
+            <CardTitle className="text-white flex items-center space-x-2">
+              <Download className="h-6 w-6 text-blue-400" />
+              <span>Export Ambassador Reports</span>
+            </CardTitle>
+            <CardDescription className="text-gray-400">
+              Download comprehensive ambassador performance reports
+              {selectedGroupLeader !== 'all' && ` for ${selectedGroupLeader}'s team`}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {filteredReports.map((report) => (
-                <div key={report.id} className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <h4 className="text-white font-medium">{report.title}</h4>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getTypeColor(report.type)}`}>
-                        {report.type}
-                      </span>
-                      <span className={`capitalize ${getStatusColor(report.status)}`}>
-                        {report.status}
-                      </span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {exportOptions.map((option) => (
+                <div key={option.name} className="bg-gray-700 rounded-lg p-6 hover:bg-gray-600 transition-colors">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className={`w-12 h-12 ${option.color} rounded-lg flex items-center justify-center`}>
+                      <FileText className="h-6 w-6 text-white" />
                     </div>
-                    <p className="text-gray-400 text-sm mb-2">{report.description}</p>
-                    <div className="flex items-center space-x-4 text-xs text-gray-500">
-                      <span>Period: {report.period}</span>
-                      <span>Generated: {report.generated_date}</span>
-                      <span>Size: {report.file_size}</span>
-                    </div>
+                    <span className="text-xs bg-blue-600 text-white px-2 py-1 rounded-full">
+                      {option.status}
+                    </span>
                   </div>
-                  <div className="flex items-center space-x-3">
-                    {report.status === 'generating' && (
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-yellow-400"></div>
-                    )}
-                    {report.status === 'ready' && (
-                      <Button
-                        onClick={() => handleDownload(report)}
-                        className="bg-blue-600 hover:bg-blue-700"
-                        size="sm"
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download
-                      </Button>
-                    )}
-                  </div>
+                  <h3 className="text-white font-semibold text-lg mb-2">{option.name}</h3>
+                  <p className="text-gray-300 text-sm mb-3">{option.description}</p>
+                  <p className="text-gray-400 text-xs mb-4">{option.details}</p>
+                  <Button
+                    onClick={() => {
+                      if (option.name === 'Excel') exportToExcel();
+                      else if (option.name === 'CSV') exportToCSV();
+                      else if (option.name === 'JSON') exportToJSON();
+                    }}
+                    className={`w-full ${option.color} hover:opacity-90`}
+                    disabled={!reportData}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Export {option.name}
+                  </Button>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
 
-        {/* Generate Report Modal */}
-        {showGenerateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true">
-            <div className="absolute inset-0 bg-black/70" onClick={() => setShowGenerateModal(false)}></div>
-            <div className="relative w-full max-w-md mx-4 bg-gray-900 rounded-lg border border-gray-700 shadow-xl">
-              <div className="flex items-center justify-between p-6 border-b border-gray-800">
-                <h3 className="text-lg font-semibold text-white">Generate New Report</h3>
-                <button
-                  onClick={() => setShowGenerateModal(false)}
-                  className="text-gray-400 hover:text-white"
-                  aria-label="Close"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="p-6">
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Report Type</label>
-                    <select className="w-full bg-gray-700 border-gray-600 text-white rounded-lg p-2">
-                      <option value="performance">Performance Report</option>
-                      <option value="engagement">Engagement Report</option>
-                      <option value="financial">Financial Report</option>
-                      <option value="activity">Activity Report</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Time Period</label>
-                    <select className="w-full bg-gray-700 border-gray-600 text-white rounded-lg p-2">
-                      <option value="last-7-days">Last 7 days</option>
-                      <option value="last-30-days">Last 30 days</option>
-                      <option value="last-3-months">Last 3 months</option>
-                      <option value="last-6-months">Last 6 months</option>
-                      <option value="last-year">Last year</option>
-                    </select>
-                  </div>
+        {/* Ambassador Summary */}
+        {reportData && (
+          <Card className="bg-gray-800 border-gray-700 mb-8">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center space-x-2">
+                <Users className="h-6 w-6 text-green-400" />
+                <span>Ambassador Summary</span>
+              </CardTitle>
+              <CardDescription className="text-gray-400">
+                Overview of ambassador performance
+                {selectedGroupLeader !== 'all' && ` under ${selectedGroupLeader}`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                <div className="bg-gray-700 rounded-lg p-4 text-center">
+                  <div className="text-2xl font-bold text-blue-400">{reportData.totalAmbassadors}</div>
+                  <p className="text-gray-400 text-sm">Ambassadors</p>
                 </div>
-
-                <div className="mt-6 flex justify-end gap-3">
-                  <Button
-                    onClick={() => setShowGenerateModal(false)}
-                    variant="outline"
-                    className="border-gray-700 text-gray-300 hover:bg-gray-800"
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    onClick={() => generateReport('performance', 'Last 30 days')}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    Generate Report
-                  </Button>
+                <div className="bg-gray-700 rounded-lg p-4 text-center">
+                  <div className="text-2xl font-bold text-green-400">{reportData.totalTasks}</div>
+                  <p className="text-gray-400 text-sm">Tasks Completed</p>
+                </div>
+                <div className="bg-gray-700 rounded-lg p-4 text-center">
+                  <div className="text-2xl font-bold text-yellow-400">{reportData.totalPoints}</div>
+                  <p className="text-gray-400 text-sm">Total Points</p>
+                </div>
+                <div className="bg-gray-700 rounded-lg p-4 text-center">
+                  <div className="text-2xl font-bold text-purple-400">{reportData.totalPeopleConnected}</div>
+                  <p className="text-gray-400 text-sm">People Connected</p>
                 </div>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         )}
+
+        {/* Detailed Submissions Table */}
+        {reportData && reportData.submissions.length > 0 && (
+          <Card className="bg-gray-800 border-gray-700">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center space-x-2">
+                <CheckCircle className="h-6 w-6 text-green-400" />
+                <span>Detailed Submissions</span>
+              </CardTitle>
+              <CardDescription className="text-gray-400">
+                Complete list of task submissions
+                {selectedGroupLeader !== 'all' && ` from ${selectedGroupLeader}'s team`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-700">
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Ambassador</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">College</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Group Leader</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Task</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Date</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Points</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">People</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.submissions.slice(0, 50).map((submission) => (
+                      <tr key={submission.id} className="border-b border-gray-800 hover:bg-gray-700">
+                        <td className="py-3 px-4">
+                          <div>
+                            <p className="text-white font-medium">{submission.user_name}</p>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-gray-300">{submission.user_college}</td>
+                        <td className="py-3 px-4">
+                          <span className="bg-blue-600 text-white px-2 py-1 rounded text-xs">
+                            {submission.user_group_leader || 'No Group Leader'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div>
+                            <p className="text-white font-medium">{submission.taskTitle}</p>
+                            <p className="text-gray-400 text-xs">ID: {submission.taskId}</p>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-gray-300">
+                          {new Date(submission.submittedAt).toLocaleDateString()}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="text-yellow-400 font-bold">{submission.points}</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="text-purple-400 font-bold">{submission.peopleConnected || 0}</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="bg-green-600 text-white px-2 py-1 rounded text-xs capitalize">
+                            {submission.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {reportData.submissions.length > 50 && (
+                  <div className="mt-4 text-center text-gray-400 text-sm">
+                    Showing first 50 submissions. Export to see all {reportData.submissions.length} submissions.
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
       </div>
     </div>
   );
