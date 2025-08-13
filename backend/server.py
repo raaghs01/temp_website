@@ -3,7 +3,10 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
+from sqlalchemy.ext.asyncio import AsyncSession
+from db import get_db, init_db, AsyncSessionLocal
+from services.database_service import DatabaseService
+from models import User, Task, Submission
 import os
 import logging
 from pathlib import Path
@@ -14,31 +17,27 @@ import jwt
 import hashlib
 import base64
 from io import BytesIO
+from contextlib import asynccontextmanager
 
 # Load environment variables
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
-
 # JWT Configuration
-JWT_SECRET = "your-super-secret-jwt-key-change-in-production"
+JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_DELTA = timedelta(days=30)
 
-# Create the main app without a prefix
-app = FastAPI()
+# Create the main app with lifespan
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await init_db()
+    await initialize_tasks()
+    yield
+    # Shutdown (if needed)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for debugging
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(lifespan=lifespan)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -47,22 +46,6 @@ api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
 # Models
-class User(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    email: str
-    password_hash: str
-    name: str
-    college: str
-    group_leader_name: str = ""
-    role: str = "ambassador"  # "ambassador" or "admin"
-    current_day: int = 0
-    total_points: int = 0
-    total_referrals: int = 0
-    registration_date: datetime = Field(default_factory=datetime.utcnow)
-    is_active: bool = True
-    status: str = "active"  # "active", "inactive", "suspended"
-    rank_position: Optional[int] = None
-
 class UserCreate(BaseModel):
     email: str
     password: str
@@ -75,28 +58,6 @@ class UserLogin(BaseModel):
     email: str
     password: str
     role: str = "ambassador"
-
-class Task(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    day: int
-    title: str
-    description: str
-    task_type: str  # "orientation", "daily_task"
-    points_reward: int = 50
-    is_active: bool = True
-
-class TaskSubmission(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    user_id: str
-    task_id: str
-    day: int
-    status_text: str = ""
-    people_connected: int = 0
-    points_earned: int = 0
-    proof_image: Optional[str] = None  # Base64 encoded image (for backward compatibility)
-    proof_files: Optional[List[dict]] = None  # List of files with metadata
-    submission_date: datetime = Field(default_factory=datetime.utcnow)
-    is_completed: bool = False
 
 class TaskSubmissionCreate(BaseModel):
     task_id: str
@@ -124,6 +85,14 @@ class LeaderboardEntry(BaseModel):
     total_referrals: int
     rank: int
 
+class UserStatusUpdateRequest(BaseModel):
+    user_id: str
+    status: str
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
 # Utility functions
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
@@ -138,129 +107,164 @@ def create_access_token(user_id: str) -> str:
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: AsyncSession = Depends(get_db)):
     try:
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = payload.get("user_id")
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
 
-        user = await db.users.find_one({"id": user_id})
+        db_service = DatabaseService(db)
+        user = await db_service.get_user_by_id(user_id)
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
 
-        user_obj = User(**user)
-
         # Check if user is suspended (only for non-admin users)
-        if user_obj.role != "admin" and user_obj.status == "suspended":
+        if user.role != "admin" and user.status == "suspended":
             raise HTTPException(status_code=403, detail="Your account has been suspended. Please contact support.")
 
         # Check if user is inactive
-        if not user_obj.is_active:
+        if not user.is_active:
             raise HTTPException(status_code=403, detail="Your account is inactive. Please contact support.")
 
-        return user_obj
+        return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.JWTError:
+    except (jwt.DecodeError, jwt.InvalidTokenError, Exception):
         raise HTTPException(status_code=401, detail="Invalid token")
 
-async def calculate_user_rank(user_id: str):
-    """Calculate user's rank based on points"""
-    user = await db.users.find_one({"id": user_id})
-    if not user:
-        return None
+async def calculate_user_rank(user_id: str, db: AsyncSession) -> int:
+    """Calculate user's rank based on total points"""
+    db_service = DatabaseService(db)
+    leaderboard = await db_service.get_leaderboard(1000)
     
-    # Get user's total points, default to 0 if not present
-    user_points = user.get("total_points", 0)
+    for i, user in enumerate(leaderboard):
+        if user.id == user_id:
+            return i + 1
     
-    # Count users with higher points
-    higher_ranked = await db.users.count_documents({
-        "total_points": {"$gt": user_points},
-        "is_active": True
-    })
-    
-    return higher_ranked + 1
+    return len(leaderboard) + 1
 
 # Initialize default tasks
 async def initialize_tasks():
-    # Check if tasks already exist
-    existing_tasks = await db.tasks.count_documents({})
-    if existing_tasks > 0:
-        return
+    async with AsyncSessionLocal() as session:
+        db_service = DatabaseService(session)
+        
+        # Check if tasks already exist
+        existing_tasks = await db_service.get_all_active_tasks()
+        if len(existing_tasks) > 0:
+            return
 
-    default_tasks = [
-        {
-            "id": str(uuid.uuid4()),
-            "day": 0,
-            "title": "Complete Orientation",
-            "description": "Watch the orientation video and read the company documents. This will help you understand our mission and how to be an effective ambassador.",
-            "task_type": "orientation",
-            "points_reward": 100,
-            "is_active": True
-        }
-    ]
-    
-    # Add daily promotion tasks with varying points
-    promotion_tasks = [
-        "Share brand story on social media",
-        "Connect with 5 potential customers",
-        "Create engaging content about our products",
-        "Host a brand awareness event",
-        "Write a product review blog post",
-        "Organize a campus meetup",
-        "Partner with student organizations",
-        "Create video testimonials",
-        "Run Instagram/TikTok campaigns",
-        "Distribute promotional materials",
-        "Conduct product demos",
-        "Get feedback from 10 students",
-        "Create brand awareness posters",
-        "Network at college events",
-        "Launch referral campaigns"
-    ]
-    
-    for day in range(1, 16):
-        task_desc = promotion_tasks[(day - 1) % len(promotion_tasks)]
-        points = 50 + (day * 5)  # Increasing points as days progress
+        default_tasks = [
+            {
+                "id": str(uuid.uuid4()),
+                "day": 0,
+                "title": "Complete Orientation",
+                "description": "Watch the orientation video and read the company documents. This will help you understand our mission and how to be an effective ambassador.",
+                "task_type": "orientation",
+                "points_reward": 100,
+                "is_active": True
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "day": 1,
+                "title": "Social Media Setup",
+                "description": "Set up your social media profiles and connect with our official accounts. Share your first post about joining DC Studios.",
+                "task_type": "social_media",
+                "points_reward": 150,
+                "is_active": True
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "day": 2,
+                "title": "Campus Outreach",
+                "description": "Visit different departments in your college and introduce DC Studios to students. Collect contact information of interested students.",
+                "task_type": "outreach",
+                "points_reward": 200,
+                "is_active": True
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "day": 3,
+                "title": "Event Planning",
+                "description": "Plan and organize a small tech event or workshop in your college. Submit your event proposal and timeline.",
+                "task_type": "event",
+                "points_reward": 250,
+                "is_active": True
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "day": 4,
+                "title": "Content Creation",
+                "description": "Create engaging content about DC Studios services. This could be a blog post, video, or infographic.",
+                "task_type": "content",
+                "points_reward": 180,
+                "is_active": True
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "day": 5,
+                "title": "Feedback Collection",
+                "description": "Collect feedback from students about their interest in tech services and internship opportunities.",
+                "task_type": "feedback",
+                "points_reward": 120,
+                "is_active": True
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "day": 6,
+                "title": "Partnership Development",
+                "description": "Identify potential partnership opportunities with student clubs, societies, or college administration.",
+                "task_type": "partnership",
+                "points_reward": 300,
+                "is_active": True
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "day": 7,
+                "title": "Weekly Report",
+                "description": "Submit a comprehensive weekly report of your activities, achievements, and challenges faced.",
+                "task_type": "report",
+                "points_reward": 100,
+                "is_active": True
+            }
+        ]
 
-        default_tasks.append({
-            "id": str(uuid.uuid4()),
-            "day": day,
-            "title": f"Day {day}: {task_desc.title()}",
-            "description": f"{task_desc}. Track your progress and share proof of your promotional activities.",
-            "task_type": "daily_task",
-            "points_reward": points,
-            "is_active": True
-        })
-    
-    await db.tasks.insert_many(default_tasks)
+        for task_data in default_tasks:
+            await db_service.create_task(task_data)
 
 # Routes
 @api_router.post("/register")
-async def register(user_data: UserCreate):
-    # Check if user already exists
-    existing_user = await db.users.find_one({"email": user_data.email})
+async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+    db_service = DatabaseService(db)
+    
+    # Check if user exists
+    existing_user = await db_service.get_user_by_email(user_data.email)
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Create new user
-    user = User(
-        email=user_data.email,
-        password_hash=hash_password(user_data.password),
-        name=user_data.name,
-        college=user_data.college,
-        group_leader_name=user_data.group_leader_name,
-        role=user_data.role
-    )
+    # Create user
+    user_dict = {
+        "id": str(uuid.uuid4()),
+        "email": user_data.email,
+        "password_hash": hash_password(user_data.password),
+        "name": user_data.name,
+        "college": user_data.college,
+        "group_leader_name": user_data.group_leader_name,
+        "role": user_data.role,
+        "current_day": 0,
+        "total_points": 0,
+        "total_referrals": 0,
+        "registration_date": datetime.utcnow(),
+        "is_active": True,
+        "status": "active"
+    }
     
-    await db.users.insert_one(user.dict())
+    user_id = await db_service.create_user(user_dict)
+    user = await db_service.get_user_by_id(user_id)
     
     # Create access token
     token = create_access_token(user.id)
-    
-    # Calculate initial rank
-    rank = await calculate_user_rank(user.id)
+    rank = await calculate_user_rank(user.id, db)
     
     return {
         "message": "Registration successful",
@@ -282,13 +286,13 @@ async def register(user_data: UserCreate):
     }
 
 @api_router.post("/login")
-async def login(login_data: UserLogin):
+async def login(login_data: UserLogin, db: AsyncSession = Depends(get_db)):
+    db_service = DatabaseService(db)
+    
     # Find user
-    user_data = await db.users.find_one({"email": login_data.email})
-    if not user_data:
+    user = await db_service.get_user_by_email(login_data.email)
+    if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    user = User(**user_data)
 
     # Verify password
     if not verify_password(login_data.password, user.password_hash):
@@ -308,9 +312,7 @@ async def login(login_data: UserLogin):
 
     # Create access token
     token = create_access_token(user.id)
-
-    # Calculate current rank
-    rank = await calculate_user_rank(user.id)
+    rank = await calculate_user_rank(user.id, db)
 
     return {
         "message": "Login successful",
@@ -332,8 +334,9 @@ async def login(login_data: UserLogin):
     }
 
 @api_router.get("/profile")
-async def get_profile(current_user: User = Depends(get_current_user)):
-    rank = await calculate_user_rank(current_user.id)
+async def get_profile(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    rank = await calculate_user_rank(current_user.id, db)
+    
     return UserProfile(
         id=current_user.id,
         email=current_user.email,
@@ -349,607 +352,190 @@ async def get_profile(current_user: User = Depends(get_current_user)):
         status=current_user.status
     )
 
-class ProfileUpdateRequest(BaseModel):
-    name: str
-    email: str
-    college: str
-    group_leader_name: str
-
-@api_router.put("/profile")
-async def update_profile(
-    data: ProfileUpdateRequest,
-    current_user: User = Depends(get_current_user)
-):
-    # Update user profile in database
-    await db.users.update_one(
-        {"id": current_user.id},
-        {"$set": {
-            "name": data.name,
-            "email": data.email,
-            "college": data.college,
-            "group_leader_name": data.group_leader_name
-        }}
-    )
-
-    return {"message": "Profile updated successfully"}
-
-@api_router.get("/tasks/{day}")
-async def get_task_for_day(day: int, current_user: User = Depends(get_current_user)):
-    task = await db.tasks.find_one({"day": day, "is_active": True})
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found for this day")
-    
-    return Task(**task)
-
 @api_router.get("/tasks")
-async def get_all_tasks(current_user: User = Depends(get_current_user)):
-    tasks = await db.tasks.find({"is_active": True}).sort("day", 1).to_list(100)
-    return [Task(**task) for task in tasks]
+async def get_tasks(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    db_service = DatabaseService(db)
+    tasks = await db_service.get_all_active_tasks()
+    return tasks
+
+@api_router.get("/leaderboard")
+async def get_leaderboard(limit: int = 10, db: AsyncSession = Depends(get_db)):
+    db_service = DatabaseService(db)
+    return await db_service.get_leaderboard(limit)
 
 @api_router.post("/submit-task")
 async def submit_task_text(
     submission: TaskSubmissionCreate,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
+    db_service = DatabaseService(db)
+    
     # Get the task to validate
-    task = await db.tasks.find_one({"id": submission.task_id})
+    task = await db_service.get_task_by_id(submission.task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
     # Calculate points (base + bonus for people connected)
-    points_earned = task["points_reward"] + (submission.people_connected * 10)
+    points_earned = task.points_reward + (submission.people_connected * 10)
     
     # Check if already submitted
-    existing_submission = await db.task_submissions.find_one({
+    existing_submission = await db_service.get_submission_by_user_and_task(current_user.id, submission.task_id)
+    
+    submission_data = {
         "user_id": current_user.id,
-        "task_id": submission.task_id
-    })
+        "task_id": submission.task_id,
+        "day": task.day,
+        "status_text": submission.status_text,
+        "people_connected": submission.people_connected,
+        "points_earned": points_earned,
+        "is_completed": True,
+        "submission_date": datetime.utcnow()
+    }
     
     if existing_submission:
         # Update existing submission
-        old_points = existing_submission.get("points_earned", 0)
+        old_points = existing_submission.points_earned
         point_difference = points_earned - old_points
         
-        await db.task_submissions.update_one(
-            {"user_id": current_user.id, "task_id": submission.task_id},
-            {"$set": {
-                "status_text": submission.status_text,
-                "people_connected": submission.people_connected,
-                "points_earned": points_earned,
-                "submission_date": datetime.utcnow(),
-                "is_completed": True
-            }}
-        )
+        await db_service.update_submission(existing_submission.id, submission_data)
         
         # Update user points and referrals
-        await db.users.update_one(
-            {"id": current_user.id},
-            {
-                "$inc": {
-                    "total_points": point_difference,
-                    "total_referrals": submission.people_connected - existing_submission.get("people_connected", 0)
-                }
-            }
+        await db_service.update_user_points(
+            current_user.id, 
+            point_difference, 
+            submission.people_connected - existing_submission.people_connected
         )
     else:
         # Create new submission
-        new_submission = TaskSubmission(
-            user_id=current_user.id,
-            task_id=submission.task_id,
-            day=task["day"],
-            status_text=submission.status_text,
-            people_connected=submission.people_connected,
-            points_earned=points_earned,
-            is_completed=True
-        )
-        await db.task_submissions.insert_one(new_submission.dict())
+        submission_data["id"] = str(uuid.uuid4())
+        await db_service.create_submission(submission_data)
         
         # Update user points and referrals
-        await db.users.update_one(
-            {"id": current_user.id},
-            {
-                "$inc": {
-                    "total_points": points_earned,
-                    "total_referrals": submission.people_connected
-                }
-            }
-        )
+        await db_service.update_user_points(current_user.id, points_earned, submission.people_connected)
     
     # Update user's current day if this was their current task
-    if task["day"] == current_user.current_day:
-        await db.users.update_one(
-            {"id": current_user.id},
-            {"$set": {"current_day": current_user.current_day + 1}}
-        )
+    if task.day == current_user.current_day:
+        await db_service.update_user_current_day(current_user.id, current_user.current_day + 1)
     
     return {"message": "Task submitted successfully", "points_earned": points_earned}
 
-@api_router.post("/submit-task-with-image")
-async def submit_task_with_image(
-    task_id: str = Form(...),
-    status_text: str = Form(""),
-    people_connected: int = Form(0),
-    image: UploadFile = File(None),
-    current_user: User = Depends(get_current_user)
-):
-    # Get the task to validate
-    task = await db.tasks.find_one({"id": task_id})
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    # Process image if provided
-    image_base64 = None
-    if image:
-        try:
-            image_data = await image.read()
-            image_base64 = base64.b64encode(image_data).decode('utf-8')
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Error processing image: {str(e)}")
-    
-    # Calculate points (base + bonus for people connected + image bonus)
-    points_earned = task["points_reward"] + (people_connected * 10)
-    if image_base64:
-        points_earned += 25  # Bonus for providing proof image
-    
-    # Check if already submitted
-    existing_submission = await db.task_submissions.find_one({
-        "user_id": current_user.id,
-        "task_id": task_id
-    })
-    
-    if existing_submission:
-        # Update existing submission
-        old_points = existing_submission.get("points_earned", 0)
-        point_difference = points_earned - old_points
-        
-        update_data = {
-            "status_text": status_text,
-            "people_connected": people_connected,
-            "points_earned": points_earned,
-            "submission_date": datetime.utcnow(),
-            "is_completed": True
-        }
-        if image_base64:
-            update_data["proof_image"] = image_base64
-            
-        await db.task_submissions.update_one(
-            {"user_id": current_user.id, "task_id": task_id},
-            {"$set": update_data}
-        )
-        
-        # Update user points and referrals
-        await db.users.update_one(
-            {"id": current_user.id},
-            {
-                "$inc": {
-                    "total_points": point_difference,
-                    "total_referrals": people_connected - existing_submission.get("people_connected", 0)
-                }
-            }
-        )
-    else:
-        # Create new submission
-        new_submission = TaskSubmission(
-            user_id=current_user.id,
-            task_id=task_id,
-            day=task["day"],
-            status_text=status_text,
-            people_connected=people_connected,
-            points_earned=points_earned,
-            proof_image=image_base64,
-            is_completed=True
-        )
-        await db.task_submissions.insert_one(new_submission.dict())
-        
-        # Update user points and referrals
-        await db.users.update_one(
-            {"id": current_user.id},
-            {
-                "$inc": {
-                    "total_points": points_earned,
-                    "total_referrals": people_connected
-                }
-            }
-        )
-    
-    # Update user's current day if this was their current task
-    if task["day"] == current_user.current_day:
-        await db.users.update_one(
-            {"id": current_user.id},
-            {"$set": {"current_day": current_user.current_day + 1}}
-        )
-    
-    return {"message": "Task submitted successfully with image", "points_earned": points_earned}
-
-@api_router.post("/submit-task-with-files")
-async def submit_task_with_files(
-    task_id: str = Form(...),
-    status_text: str = Form(""),
-    people_connected: int = Form(0),
-    files: List[UploadFile] = File(...),
-    current_user: User = Depends(get_current_user)
-):
-    # Get the task to validate
-    task = await db.tasks.find_one({"id": task_id})
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    # Process files if provided
-    processed_files = []
-    if files:
-        for file in files:
-            try:
-                # Read file data
-                file_data = await file.read()
-                file_base64 = base64.b64encode(file_data).decode('utf-8')
-
-                # Get file info
-                file_info = {
-                    "filename": file.filename,
-                    "content_type": file.content_type,
-                    "size": len(file_data),
-                    "data": file_base64
-                }
-                processed_files.append(file_info)
-
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Error processing file {file.filename}: {str(e)}")
-
-    # Calculate points (base + bonus for people connected + file bonus)
-    points_earned = task["points_reward"] + (people_connected * 10)
-    if processed_files:
-        # Bonus for providing proof files (25 points for first file, 10 for each additional)
-        points_earned += 25 + (len(processed_files) - 1) * 10
-
-    # Check if already submitted
-    existing_submission = await db.task_submissions.find_one({
-        "user_id": current_user.id,
-        "task_id": task_id
-    })
-
-    if existing_submission:
-        # Update existing submission
-        old_points = existing_submission.get("points_earned", 0)
-        point_difference = points_earned - old_points
-
-        update_data = {
-            "status_text": status_text,
-            "people_connected": people_connected,
-            "points_earned": points_earned,
-            "submission_date": datetime.utcnow(),
-            "is_completed": True,
-            "proof_files": processed_files
-        }
-
-        # Keep backward compatibility - if only one image file, also store in proof_image
-        if len(processed_files) == 1 and processed_files[0]["content_type"].startswith("image/"):
-            update_data["proof_image"] = processed_files[0]["data"]
-
-        await db.task_submissions.update_one(
-            {"user_id": current_user.id, "task_id": task_id},
-            {"$set": update_data}
-        )
-
-        # Update user points and referrals
-        await db.users.update_one(
-            {"id": current_user.id},
-            {
-                "$inc": {
-                    "total_points": point_difference,
-                    "total_referrals": people_connected - existing_submission.get("people_connected", 0)
-                }
-            }
-        )
-    else:
-        # Create new submission
-        new_submission_data = {
-            "id": str(uuid.uuid4()),
-            "user_id": current_user.id,
-            "task_id": task_id,
-            "day": task["day"],
-            "status_text": status_text,
-            "people_connected": people_connected,
-            "points_earned": points_earned,
-            "proof_files": processed_files,
-            "submission_date": datetime.utcnow(),
-            "is_completed": True
-        }
-
-        # Keep backward compatibility - if only one image file, also store in proof_image
-        if len(processed_files) == 1 and processed_files[0]["content_type"].startswith("image/"):
-            new_submission_data["proof_image"] = processed_files[0]["data"]
-
-        await db.task_submissions.insert_one(new_submission_data)
-
-        # Update user points and referrals
-        await db.users.update_one(
-            {"id": current_user.id},
-            {
-                "$inc": {
-                    "total_points": points_earned,
-                    "total_referrals": people_connected
-                }
-            }
-        )
-
-    # Update user's current day if this was their current task
-    if task["day"] == current_user.current_day:
-        await db.users.update_one(
-            {"id": current_user.id},
-            {"$set": {"current_day": current_user.current_day + 1}}
-        )
-
-    return {
-        "message": "Task submitted successfully with files",
-        "points_earned": points_earned,
-        "files_uploaded": len(processed_files)
-    }
-
-@api_router.get("/my-submissions")
-async def get_my_submissions(current_user: User = Depends(get_current_user)):
-    submissions = await db.task_submissions.find({"user_id": current_user.id}).sort("day", 1).to_list(100)
-    return [TaskSubmission(**submission) for submission in submissions]
-
-@api_router.get("/submission/{task_id}")
-async def get_submission_for_task(task_id: str, current_user: User = Depends(get_current_user)):
-    submission = await db.task_submissions.find_one({
-        "user_id": current_user.id,
-        "task_id": task_id
-    })
-    if not submission:
-        return None
-    return TaskSubmission(**submission)
-
-# Dashboard stats
 @api_router.get("/dashboard-stats")
-async def get_dashboard_stats(current_user: User = Depends(get_current_user)):
+async def get_dashboard_stats(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    db_service = DatabaseService(db)
+    
     # Get user's submissions
-    submissions = await db.task_submissions.find({"user_id": current_user.id}).to_list(100)
+    submissions = await db_service.get_user_submissions(current_user.id)
     
     # Get updated user data
-    user_data = await db.users.find_one({"id": current_user.id})
-    user = User(**user_data)
+    user = await db_service.get_user_by_id(current_user.id)
     
     total_tasks_completed = len(submissions)
     current_day = user.current_day
     
     # Get next task
-    next_task = await db.tasks.find_one({"day": current_day, "is_active": True})
+    next_task = await db_service.get_task_by_day(current_day)
     
     # Calculate rank
-    rank = await calculate_user_rank(user.id)
+    rank = await calculate_user_rank(user.id, db)
     
     # Calculate completion percentage
     total_available_tasks = current_day + 1
     completion_percentage = (total_tasks_completed / max(total_available_tasks, 1)) * 100
     
     return {
-        "current_day": current_day,
-        "total_tasks_completed": total_tasks_completed,
         "total_points": user.total_points,
         "total_referrals": user.total_referrals,
-        "rank_position": rank,
+        "current_day": current_day,
+        "total_tasks_completed": total_tasks_completed,
+        "rank": rank,
         "completion_percentage": round(completion_percentage, 1),
-        "next_task": Task(**next_task) if next_task else None,
-        "user_name": user.name,
-        "college": user.college
+        "next_task": {
+            "id": next_task.id if next_task else None,
+            "title": next_task.title if next_task else "No more tasks",
+            "description": next_task.description if next_task else "",
+            "points_reward": next_task.points_reward if next_task else 0
+        } if next_task else None
     }
 
-# Leaderboard
-@api_router.get("/leaderboard")
-async def get_leaderboard(limit: int = 10, current_user: User = Depends(get_current_user)):
-    # Get top users by points
-    top_users = await db.users.find(
-        {"is_active": True}
-    ).sort("total_points", -1).limit(limit).to_list(limit)
-    
-    leaderboard = []
-    for i, user in enumerate(top_users):
-        leaderboard.append(LeaderboardEntry(
-            name=user["name"],
-            college=user["college"],
-            total_points=user.get("total_points", 0),
-            total_referrals=user.get("total_referrals", 0),
-            rank=i + 1
-        ))
-    
-    return leaderboard
+@api_router.get("/my-submissions")
+async def get_my_submissions(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    db_service = DatabaseService(db)
+    submissions = await db_service.get_user_submissions(current_user.id)
+    return submissions
 
-# Admin endpoints
-@api_router.get("/admin/stats")
-async def get_admin_stats(current_user: User = Depends(get_current_user)):
-    # Check if user is admin
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Access denied. Admin role required.")
-    
-    # Get all users
-    all_users = await db.users.find({"is_active": True}).to_list(1000)
-    
-    # Calculate stats
-    total_ambassadors = len([u for u in all_users if u.get("role") == "ambassador"])
-    active_ambassadors = len([u for u in all_users if u.get("role") == "ambassador" and u.get("is_active", True)])
-    
-    # Calculate total revenue (simplified - could be enhanced with actual revenue tracking)
-    total_revenue = sum(u.get("total_points", 0) * 0.1 for u in all_users if u.get("role") == "ambassador")
-    
-    # Get total events (simplified - could be enhanced with actual event tracking)
-    total_events = len([u for u in all_users if u.get("role") == "ambassador" and u.get("total_points", 0) > 0])
-    
-    # Calculate total students reached
-    total_students_reached = sum(u.get("total_referrals", 0) for u in all_users if u.get("role") == "ambassador")
-    
-    # Calculate average engagement rate
-    engagement_rates = [u.get("total_points", 0) / max(u.get("current_day", 1), 1) for u in all_users if u.get("role") == "ambassador"]
-    average_engagement_rate = sum(engagement_rates) / len(engagement_rates) if engagement_rates else 0
-    
-    # Find top performing college
-    college_stats = {}
-    for user in all_users:
-        if user.get("role") == "ambassador":
-            college = user.get("college", "Unknown")
-            if college not in college_stats:
-                college_stats[college] = 0
-            college_stats[college] += user.get("total_points", 0)
-    
-    top_performing_college = max(college_stats.items(), key=lambda x: x[1])[0] if college_stats else "None"
-    
-    # Calculate monthly growth (simplified)
-    monthly_growth = 15.5  # Placeholder value
-    
-    return {
-        "total_ambassadors": total_ambassadors,
-        "active_ambassadors": active_ambassadors,
-        "total_revenue": round(total_revenue, 2),
-        "total_events": total_events,
-        "total_students_reached": total_students_reached,
-        "average_engagement_rate": round(average_engagement_rate, 2),
-        "top_performing_college": top_performing_college,
-        "monthly_growth": monthly_growth
+@api_router.post("/submit-task-with-files")
+async def submit_task_with_files(
+    task_id: str = Form(...),
+    status_text: str = Form(...),
+    people_connected: int = Form(0),
+    files: List[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    db_service = DatabaseService(db)
+
+    # Get the task to validate
+    task = await db_service.get_task_by_id(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Calculate points (base + bonus for people connected)
+    points_earned = task.points_reward + (people_connected * 10)
+
+    # Check if already submitted
+    existing_submission = await db_service.get_submission_by_user_and_task(current_user.id, task_id)
+
+    # Handle file uploads (for now, we'll just store file names)
+    file_names = []
+    for file in files:
+        if file.filename:
+            file_names.append(file.filename)
+
+    submission_data = {
+        "user_id": current_user.id,
+        "task_id": task_id,
+        "day": task.day,
+        "status_text": status_text,
+        "people_connected": people_connected,
+        "points_earned": points_earned,
+        "is_completed": True,
+        "submission_date": datetime.utcnow(),
+        "file_urls": ",".join(file_names) if file_names else None  # Store file names as comma-separated string
     }
 
-@api_router.get("/admin/ambassadors")
-async def get_ambassadors(current_user: User = Depends(get_current_user)):
-    # Check if user is admin
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Access denied. Admin role required.")
+    if existing_submission:
+        # Update existing submission
+        old_points = existing_submission.points_earned
+        point_difference = points_earned - old_points
 
-    # Get all ambassador users
-    ambassadors = await db.users.find({"role": "ambassador", "is_active": True}).to_list(1000)
+        await db_service.update_submission(existing_submission.id, submission_data)
 
-    return [
-        {
-            "id": ambassador["id"],
-            "name": ambassador["name"],
-            "email": ambassador["email"],
-            "college": ambassador["college"],
-            "group_leader_name": ambassador.get("group_leader_name", ""),
-            "total_points": ambassador.get("total_points", 0),
-            "rank_position": ambassador.get("rank_position"),
-            "current_day": ambassador.get("current_day", 0),
-            "total_referrals": ambassador.get("total_referrals", 0),
-            "events_hosted": int(ambassador.get("total_points", 0) / 50),  # Simplified calculation
-            "students_reached": ambassador.get("total_referrals", 0),
-            "revenue_generated": ambassador.get("total_points", 0) * 0.1,  # Simplified calculation
-            "social_media_posts": int(ambassador.get("total_points", 0) / 10),  # Simplified calculation
-            "engagement_rate": ambassador.get("total_points", 0) / max(ambassador.get("current_day", 1), 1),
-            "followers_growth": ambassador.get("total_referrals", 0) * 2,  # Simplified calculation
-            "campaign_days": ambassador.get("current_day", 0),
-            "status": ambassador.get("status", "active"),
-            "last_activity": ambassador.get("registration_date", datetime.utcnow()).isoformat(),
-            "join_date": ambassador.get("registration_date", datetime.utcnow()).isoformat()
-        }
-        for ambassador in ambassadors
-    ]
+        # Update user points and referrals
+        await db_service.update_user_points(
+            current_user.id,
+            point_difference,
+            people_connected - existing_submission.people_connected
+        )
+    else:
+        # Create new submission
+        submission_data["id"] = str(uuid.uuid4())
+        await db_service.create_submission(submission_data)
 
-@api_router.get("/admin/group-leaders")
-async def get_group_leaders(current_user: User = Depends(get_current_user)):
-    # Check if user is admin
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Access denied. Admin role required.")
+        # Update user points and referrals
+        await db_service.update_user_points(current_user.id, points_earned, people_connected)
 
-    # Get all unique group leaders from ambassador users
-    ambassadors = await db.users.find({"role": "ambassador", "is_active": True}).to_list(1000)
+    # Update user's current day if this was their current task
+    if task.day == current_user.current_day:
+        await db_service.update_user_current_day(current_user.id, current_user.current_day + 1)
 
-    group_leaders = set()
-    for ambassador in ambassadors:
-        group_leader = ambassador.get("group_leader_name", "").strip()
-        if group_leader:  # Only add non-empty group leader names
-            group_leaders.add(group_leader)
-
-    return sorted(list(group_leaders))
-
-@api_router.get("/admin/ambassadors-by-group-leader")
-async def get_ambassadors_by_group_leader(group_leader: str, current_user: User = Depends(get_current_user)):
-    # Check if user is admin
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Access denied. Admin role required.")
-
-    # Get ambassadors filtered by group leader
-    ambassadors = await db.users.find({
-        "role": "ambassador",
-        "is_active": True,
-        "group_leader_name": group_leader
-    }).to_list(1000)
-
-    return [
-        {
-            "id": ambassador["id"],
-            "name": ambassador["name"],
-            "email": ambassador["email"],
-            "college": ambassador["college"],
-            "group_leader_name": ambassador.get("group_leader_name", ""),
-            "total_points": ambassador.get("total_points", 0),
-            "rank_position": ambassador.get("rank_position"),
-            "current_day": ambassador.get("current_day", 0),
-            "total_referrals": ambassador.get("total_referrals", 0),
-            "events_hosted": int(ambassador.get("total_points", 0) / 50),
-            "students_reached": ambassador.get("total_referrals", 0),
-            "revenue_generated": ambassador.get("total_points", 0) * 0.1,
-            "social_media_posts": int(ambassador.get("total_points", 0) / 10),
-            "engagement_rate": ambassador.get("total_points", 0) / max(ambassador.get("current_day", 1), 1),
-            "followers_growth": ambassador.get("total_referrals", 0) * 2,
-            "campaign_days": ambassador.get("current_day", 0),
-            "status": ambassador.get("status", "active"),
-            "last_activity": ambassador.get("registration_date", datetime.utcnow()).isoformat(),
-            "join_date": ambassador.get("registration_date", datetime.utcnow()).isoformat()
-        }
-        for ambassador in ambassadors
-    ]
-
-# Admin endpoints for user management
-class UserStatusUpdateRequest(BaseModel):
-    user_id: str
-    status: str  # "active", "inactive", "suspended"
-
-@api_router.post("/admin/suspend-user")
-async def suspend_user(
-    data: UserStatusUpdateRequest,
-    current_user: User = Depends(get_current_user)
-):
-    # Check if user is admin
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Access denied. Admin role required.")
-
-    # Update user status to suspended
-    result = await db.users.update_one(
-        {"id": data.user_id},
-        {"$set": {"status": "suspended"}}
-    )
-
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    return {"message": "User suspended successfully"}
-
-@api_router.post("/admin/activate-user")
-async def activate_user(
-    data: UserStatusUpdateRequest,
-    current_user: User = Depends(get_current_user)
-):
-    # Check if user is admin
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Access denied. Admin role required.")
-
-    # Update user status to active
-    result = await db.users.update_one(
-        {"id": data.user_id},
-        {"$set": {"status": "active"}}
-    )
-
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    return {"message": "User activated successfully"}
-
-# Change password endpoint
-class ChangePasswordRequest(BaseModel):
-    old_password: str
-    new_password: str
+    return {"message": "Task submitted successfully", "points_earned": points_earned}
 
 @api_router.post("/change-password")
 async def change_password(
     data: ChangePasswordRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     # Verify old password
     if not verify_password(data.old_password, current_user.password_hash):
@@ -959,24 +545,23 @@ async def change_password(
     new_password_hash = hash_password(data.new_password)
 
     # Update password in database
-    await db.users.update_one(
-        {"id": current_user.id},
-        {"$set": {"password_hash": new_password_hash}}
-    )
+    db_service = DatabaseService(db)
+    await db_service.update_user_password(current_user.id, new_password_hash)
 
     return {"message": "Password changed successfully"}
 
 # Initialize tasks on startup
-@app.on_event("startup")
-async def startup_event():
-    await initialize_tasks()
+# @app.on_event("startup")
+# async def startup_event():
+#     await init_db()
+#     await initialize_tasks()
 
 # Include the router in the main app
 app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # or ["*"] for all origins (less secure)
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -988,10 +573,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
 
 if __name__ == "__main__":
     import uvicorn
