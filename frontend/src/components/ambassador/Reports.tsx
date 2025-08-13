@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { FileText, TrendingUp, Download, PieChart, Filter, Users, Award, Clock, CheckCircle } from 'lucide-react';
+import { FileText, Download, Users, Award, CheckCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useTaskData, useFilteredTaskData } from '../../hooks/useTaskData';
 
@@ -46,12 +45,9 @@ const Reports: React.FC = () => {
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState({ start: '', end: '' });
   // Use the new task data service
   const { stats, completions, loading: taskLoading } = useTaskData();
-  const filteredData = useFilteredTaskData({
-    dateRange: dateRange.start && dateRange.end ? dateRange : undefined
-  });
+  const filteredData = useFilteredTaskData({});
 
   // Fetch report data from backend
   const fetchReportData = async () => {
@@ -124,7 +120,7 @@ const Reports: React.FC = () => {
             {
               id: '2',
               taskId: '1',
-              taskTitle: 'Social Media Campaign - Day 1',
+              taskTitle: 'Social Media Campaign - Day 0',
               submissionText: 'Created and posted 5 engaging posts across Instagram, Twitter, and LinkedIn. Achieved 200+ likes and 50+ shares with proper hashtags and brand mentions.',
               imageUrl: '/sample-post.jpg',
               submittedAt: '2024-01-08T15:45:00Z',
@@ -778,16 +774,9 @@ const Reports: React.FC = () => {
       <div className="flex items-center justify-between p-6 border-b border-gray-800">
         <div className="flex items-center space-x-4">
           <h1 className="text-2xl font-bold">Reports</h1>
-          <div className="bg-green-600 text-white px-3 py-1 rounded-full text-sm">
-            Live Data
-          </div>
         </div>
 
         <div className="flex items-center space-x-4">
-          <div className="bg-gray-800 text-gray-300 px-4 py-2 rounded-lg text-sm">
-            <FileText className="h-4 w-4 inline mr-2" />
-            Auto-generated
-          </div>
           <Button
             onClick={() => fetchReportData()}
             className="bg-blue-600 hover:bg-blue-700"
@@ -808,8 +797,8 @@ const Reports: React.FC = () => {
 
         {/* Stats Overview */}
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            {[...Array(4)].map((_, i) => (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {[...Array(3)].map((_, i) => (
               <Card key={i} className="bg-gray-800 border-gray-700">
                 <CardContent className="p-6">
                   <div className="animate-pulse">
@@ -822,7 +811,7 @@ const Reports: React.FC = () => {
             ))}
           </div>
         ) : reportData ? (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <Card className="bg-gray-800 border-gray-700">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
@@ -867,21 +856,6 @@ const Reports: React.FC = () => {
                 </div>
               </CardContent>
             </Card>
-
-            <Card className="bg-gray-800 border-gray-700">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-400 text-sm font-medium">Avg. Task Time</p>
-                    <p className="text-2xl font-bold text-white mt-1">{reportData.averageTaskTime}</p>
-                    <p className="text-purple-400 text-xs mt-1">Per task</p>
-                  </div>
-                  <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
-                    <Clock className="h-6 w-6 text-white" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         ) : (
           <div className="text-center py-8">
@@ -889,75 +863,7 @@ const Reports: React.FC = () => {
           </div>
         )}
 
-        {/* Filters */}
-        {reportData && (
-          <Card className="bg-gray-800 border-gray-700 mb-8">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center space-x-2">
-                <Filter className="h-5 w-5 text-blue-400" />
-                <span>Report Filters</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Start Date</label>
-                  <Input
-                    type="date"
-                    value={dateRange.start}
-                    onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                    className="bg-gray-700 border-gray-600 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">End Date</label>
-                  <Input
-                    type="date"
-                    value={dateRange.end}
-                    onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                    className="bg-gray-700 border-gray-600 text-white"
-                  />
-                </div>
-
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-
-
-        {/* Monthly Progress */}
-        {reportData && reportData.monthlyProgress.length > 0 && (
-          <Card className="bg-gray-800 border-gray-700 mb-8">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center space-x-2">
-                <TrendingUp className="h-6 w-6 text-purple-400" />
-                <span>Monthly Progress</span>
-              </CardTitle>
-              <CardDescription className="text-gray-400">
-                Your task completion and points earned over time
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {reportData.monthlyProgress.map((month, index) => (
-                  <div key={index} className="bg-gray-700 rounded-lg p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-white font-medium">{month.month}</p>
-                        <p className="text-gray-400 text-sm">{month.tasks} tasks completed</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-yellow-400">{month.points}</p>
-                        <p className="text-gray-400 text-sm">points</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {/* Filters section commented out */}
 
         {/* Enhanced Task Submissions Table */}
         {filteredData.completions.length > 0 && (
@@ -978,32 +884,16 @@ const Reports: React.FC = () => {
                     <tr className="border-b border-gray-700">
                       <th className="text-left py-3 px-4 text-gray-300 font-medium">Day</th>
                       <th className="text-left py-3 px-4 text-gray-300 font-medium">Task</th>
-                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Date</th>
-                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Points</th>
-                      <th className="text-left py-3 px-4 text-gray-300 font-medium">People</th>
-                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Priority</th>
+                      {/* <th className="text-left py-3 px-4 text-gray-300 font-medium">Date</th> */}
+                      {/* <th className="text-left py-3 px-4 text-gray-300 font-medium">Points</th> */}
+                      {/* <th className="text-left py-3 px-4 text-gray-300 font-medium">People</th> */}
+                      {/* <th className="text-left py-3 px-4 text-gray-300 font-medium">Priority</th> */}
                       <th className="text-left py-3 px-4 text-gray-300 font-medium">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredData.completions
-                      .filter(completion => {
-                        if (!dateRange.start && !dateRange.end) return true;
-                        const compDate = new Date(completion.completedAt);
-                        const startDate = dateRange.start ? new Date(dateRange.start) : new Date('1900-01-01');
-                        const endDate = dateRange.end ? new Date(dateRange.end) : new Date('2100-12-31');
-                        return compDate >= startDate && compDate <= endDate;
-                      })
                       .map(completion => {
-                        const getPriorityColor = (priority: string) => {
-                          switch (priority) {
-                            case 'high': return 'text-red-400';
-                            case 'medium': return 'text-yellow-400';
-                            case 'low': return 'text-green-400';
-                            default: return 'text-gray-400';
-                          }
-                        };
-
                         return (
                           <tr key={completion.id} className="border-b border-gray-700 hover:bg-gray-750">
                             <td className="py-3 px-4">
@@ -1019,23 +909,23 @@ const Reports: React.FC = () => {
                                 </p>
                               </div>
                             </td>
-                            <td className="py-3 px-4 text-gray-300">
+                            {/* <td className="py-3 px-4 text-gray-300">
                               {new Date(completion.completedAt).toLocaleDateString()}
-                            </td>
-                            <td className="py-3 px-4">
+                            </td> */}
+                            {/* <td className="py-3 px-4">
                               <span className="text-yellow-400 font-medium">{completion.points}</span>
-                            </td>
-                            <td className="py-3 px-4">
+                            </td> */}
+                            {/* <td className="py-3 px-4">
                               <div className="flex items-center space-x-1">
                                 <Users className="h-3 w-3 text-purple-400" />
                                 <span className="text-purple-400">{completion.peopleConnected}</span>
                               </div>
-                            </td>
-                            <td className="py-3 px-4">
+                            </td> */}
+                            {/* <td className="py-3 px-4">
                               <span className={`text-xs font-medium ${getPriorityColor(completion.priority)}`}>
                                 {completion.priority.toUpperCase()}
                               </span>
-                            </td>
+                            </td> */}
                             <td className="py-3 px-4">
                               <span className="px-2 py-1 bg-green-600 text-green-100 rounded-full text-xs">
                                 Completed

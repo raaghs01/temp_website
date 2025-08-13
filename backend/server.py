@@ -92,7 +92,8 @@ class TaskSubmission(BaseModel):
     status_text: str = ""
     people_connected: int = 0
     points_earned: int = 0
-    proof_image: Optional[str] = None  # Base64 encoded image
+    proof_image: Optional[str] = None  # Base64 encoded image (for backward compatibility)
+    proof_files: Optional[List[dict]] = None  # List of files with metadata
     submission_date: datetime = Field(default_factory=datetime.utcnow)
     is_completed: bool = False
 
@@ -210,7 +211,7 @@ async def initialize_tasks():
     for day in range(1, 16):
         task_desc = promotion_tasks[(day - 1) % len(promotion_tasks)]
         points = 50 + (day * 5)  # Increasing points as days progress
-        
+
         default_tasks.append({
             "id": str(uuid.uuid4()),
             "day": day,
@@ -536,6 +537,130 @@ async def submit_task_with_image(
         )
     
     return {"message": "Task submitted successfully with image", "points_earned": points_earned}
+
+@api_router.post("/submit-task-with-files")
+async def submit_task_with_files(
+    task_id: str = Form(...),
+    status_text: str = Form(""),
+    people_connected: int = Form(0),
+    files: List[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    # Get the task to validate
+    task = await db.tasks.find_one({"id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Process files if provided
+    processed_files = []
+    if files:
+        for file in files:
+            try:
+                # Read file data
+                file_data = await file.read()
+                file_base64 = base64.b64encode(file_data).decode('utf-8')
+
+                # Get file info
+                file_info = {
+                    "filename": file.filename,
+                    "content_type": file.content_type,
+                    "size": len(file_data),
+                    "data": file_base64
+                }
+                processed_files.append(file_info)
+
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error processing file {file.filename}: {str(e)}")
+
+    # Calculate points (base + bonus for people connected + file bonus)
+    points_earned = task["points_reward"] + (people_connected * 10)
+    if processed_files:
+        # Bonus for providing proof files (25 points for first file, 10 for each additional)
+        points_earned += 25 + (len(processed_files) - 1) * 10
+
+    # Check if already submitted
+    existing_submission = await db.task_submissions.find_one({
+        "user_id": current_user.id,
+        "task_id": task_id
+    })
+
+    if existing_submission:
+        # Update existing submission
+        old_points = existing_submission.get("points_earned", 0)
+        point_difference = points_earned - old_points
+
+        update_data = {
+            "status_text": status_text,
+            "people_connected": people_connected,
+            "points_earned": points_earned,
+            "submission_date": datetime.utcnow(),
+            "is_completed": True,
+            "proof_files": processed_files
+        }
+
+        # Keep backward compatibility - if only one image file, also store in proof_image
+        if len(processed_files) == 1 and processed_files[0]["content_type"].startswith("image/"):
+            update_data["proof_image"] = processed_files[0]["data"]
+
+        await db.task_submissions.update_one(
+            {"user_id": current_user.id, "task_id": task_id},
+            {"$set": update_data}
+        )
+
+        # Update user points and referrals
+        await db.users.update_one(
+            {"id": current_user.id},
+            {
+                "$inc": {
+                    "total_points": point_difference,
+                    "total_referrals": people_connected - existing_submission.get("people_connected", 0)
+                }
+            }
+        )
+    else:
+        # Create new submission
+        new_submission_data = {
+            "id": str(uuid.uuid4()),
+            "user_id": current_user.id,
+            "task_id": task_id,
+            "day": task["day"],
+            "status_text": status_text,
+            "people_connected": people_connected,
+            "points_earned": points_earned,
+            "proof_files": processed_files,
+            "submission_date": datetime.utcnow(),
+            "is_completed": True
+        }
+
+        # Keep backward compatibility - if only one image file, also store in proof_image
+        if len(processed_files) == 1 and processed_files[0]["content_type"].startswith("image/"):
+            new_submission_data["proof_image"] = processed_files[0]["data"]
+
+        await db.task_submissions.insert_one(new_submission_data)
+
+        # Update user points and referrals
+        await db.users.update_one(
+            {"id": current_user.id},
+            {
+                "$inc": {
+                    "total_points": points_earned,
+                    "total_referrals": people_connected
+                }
+            }
+        )
+
+    # Update user's current day if this was their current task
+    if task["day"] == current_user.current_day:
+        await db.users.update_one(
+            {"id": current_user.id},
+            {"$set": {"current_day": current_user.current_day + 1}}
+        )
+
+    return {
+        "message": "Task submitted successfully with files",
+        "points_earned": points_earned,
+        "files_uploaded": len(processed_files)
+    }
 
 @api_router.get("/my-submissions")
 async def get_my_submissions(current_user: User = Depends(get_current_user)):

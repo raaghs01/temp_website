@@ -162,9 +162,9 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser, logout }) => {
       <div className="flex items-center justify-between p-6 border-b border-gray-800">
         <div className="flex items-center space-x-4">
           <h1 className="text-2xl font-bold">Profile & Settings</h1>
-          <div className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm">
+          {/* <div className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm">
             Manage Account
-          </div>
+          </div> */}
         </div>
 
         <div className="flex items-center space-x-4">
@@ -356,8 +356,27 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser, logout }) => {
                     >
                       Update
                     </button>
+                  </div> 
+                </div>
+                <div className="bg-gray-700 rounded-lg p-4">
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium text-white flex items-center space-x-2">
+                        <LogOut className="h-4 w-4 text-red-400" />
+                        <span>Sign Out</span>
+                      </h4>
+                      <p className="text-gray-400 text-sm">Sign out of your account</p>
+                    </div>
+                    <button
+                      className="text-red-400 hover:text-red-300 text-sm font-medium transition-colors"
+                      onClick={() => setShowSignOutDialog(true)}
+                    >
+                      Sign Out
+                    </button>
                   </div>
                 </div>
+                
                 {/* Password Change Modal */}
                 {showPasswordModal && (
                   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60">
@@ -446,7 +465,7 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser, logout }) => {
             </Card>
 
             {/* Preferences Card */}
-            <Card className="bg-gray-800 border-gray-700">
+            {/* <Card className="bg-gray-800 border-gray-700">
               <CardHeader>
                 <CardTitle className="text-white flex items-center space-x-2">
                   <SettingsIcon className="h-6 w-6 text-purple-400" />
@@ -493,25 +512,9 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser, logout }) => {
                   </div>
                 </div>
 
-                <div className="bg-gray-700 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium text-white flex items-center space-x-2">
-                        <LogOut className="h-4 w-4 text-red-400" />
-                        <span>Sign Out</span>
-                      </h4>
-                      <p className="text-gray-400 text-sm">Sign out of your account</p>
-                    </div>
-                    <button
-                      className="text-red-400 hover:text-red-300 text-sm font-medium transition-colors"
-                      onClick={() => setShowSignOutDialog(true)}
-                    >
-                      Sign Out
-                    </button>
-                  </div>
-                </div>
+                
               </CardContent>
-            </Card>
+            </Card> */}
           </div>
 
           {/* Stats Card */}
@@ -563,7 +566,7 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser, logout }) => {
 
         {/* Additional Info */}
         <div className="mt-6">
-          <Card className="bg-gray-800 border-gray-700 max-w-2xl mx-auto">
+          {/* <Card className="bg-gray-800 border-gray-700 max-w-2xl mx-auto">
             <CardHeader>
               <CardTitle className="text-white flex items-center space-x-2">
                 <Award className="h-6 w-6 text-yellow-400" />
@@ -595,7 +598,7 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser, logout }) => {
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Bell, TrendingUp, Users, Award, Calendar, CheckCircle, Eye, Clock } from 'lucide-react';
+import { TrendingUp, Users, Award, Calendar, CheckCircle, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTaskData } from '../../hooks/useTaskData';
 
@@ -26,7 +26,7 @@ interface DashboardStats {
 const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ user }) => {
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState(3);
+
   const { stats } = useTaskData();
   const [showVideoModal, setShowVideoModal] = useState(false);
 
@@ -82,9 +82,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
     fetchDashboardStats();
   }, []);
 
-  const handleStartTask = () => {
-    setShowVideoModal(true);
-  };
+
 
   const navigateToLeaderboardAnalytics = (): void => {
     const navigationEvent = new CustomEvent('navigate', {
@@ -100,10 +98,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
     window.dispatchEvent(navigationEvent);
   };
 
-  const handleNotificationClick = () => {
-    setNotifications(0);
-    alert('Notifications cleared!');
-  };
+
 
   if (loading) {
     return (
@@ -115,24 +110,10 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header with Notifications */}
+      {/* Header */}
       <div className="flex items-center justify-between p-6 border-b border-gray-800">
         <div className="flex items-center space-x-4">
           <h1 className="text-2xl font-bold">Dashboard</h1>
-        </div>
-        
-        <div className="flex items-center space-x-4">
-          <button 
-            onClick={handleNotificationClick}
-            className="relative p-2 text-gray-400 hover:text-white transition-colors"
-          >
-            <Bell className="h-6 w-6" />
-            {notifications > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                {notifications}
-              </span>
-            )}
-          </button>
         </div>
       </div>
 
@@ -210,13 +191,13 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
         {/* Progress and Analytics Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Progress Section with gradient bar and stats */}
-          <Card className="bg-gray-800 border-gray-700">
+          <Card className="bg-gray-800 border-gray-700 flex flex-col">
             <CardHeader>
               <CardTitle className="text-white">Your Progress</CardTitle>
               <CardDescription className="text-gray-400">Track your ambassador journey</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
+            <CardContent className="flex-1">
+              <div className="space-y-6 h-full flex flex-col">
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-gray-300">Completion Rate</span>
@@ -245,7 +226,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                 </div>
 
                 {/* Additional Progress Metrics */}
-                <div className="border-t border-gray-600 pt-4">
+                <div className="border-t border-gray-600 pt-4 mt-auto">
                   <div className="grid grid-cols-2 gap-4 text-center">
                     <div>
                       <p className="text-lg font-bold text-white">{stats.totalTasks}</p>
@@ -261,8 +242,8 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
             </CardContent>
           </Card>
 
-          {/* Analytics Chart Placeholder */}
-          <Card className="bg-gray-800 border-gray-700">
+          {/* Analytics Chart */}
+          <Card className="bg-gray-800 border-gray-700 flex flex-col">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -277,8 +258,8 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                 </button>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="h-64 bg-gray-700 rounded-lg p-4">
+            <CardContent className="flex-1">
+              <div className="h-full bg-gray-700 rounded-lg p-4 min-h-[320px] flex flex-col">
                 {/* Performance chart with real data */}
                 <PerformanceChart completions={stats.recentCompletions} monthlyProgress={stats.monthlyProgress} />
               </div>
@@ -286,32 +267,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
           </Card>
         </div>
 
-        {/* Next Task Section */}
-        {dashboardStats?.next_task && (
-          <Card className="bg-gradient-to-r from-purple-600 to-blue-600 border-0">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h3 className="text-xl font-bold text-white mb-2">{dashboardStats.next_task.title}</h3>
-                  <p className="text-purple-100 mb-4">{dashboardStats.next_task.description}</p>
-                  <div className="flex items-center space-x-4 text-sm">
-                    <span className="text-purple-200">Day {dashboardStats.next_task.day} • {dashboardStats.next_task.points} points</span>
-                    <div className="flex items-center space-x-1 text-yellow-300">
-                      <Eye className="h-4 w-4" />
-                      <span>{dashboardStats.next_task.priority}</span>
-                    </div>
-                  </div>
-                </div>
-                <Button 
-                  onClick={handleStartTask}
-                  className="bg-white text-purple-600 hover:bg-gray-100 font-medium"
-                >
-                  Start Task
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+
 
         {/* Recent Task Completions */}
         {stats.recentCompletions.length > 0 && (
@@ -490,7 +446,7 @@ const PerformanceChart: React.FC<PerformanceChartProps> = ({ completions }) => {
   const [hoverIndex, setHoverIndex] = React.useState<number | null>(null);
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full flex flex-col">
       {/* Chart Header with Summary */}
       <div className="flex justify-between items-center mb-4">
         <div className="text-sm text-gray-300">
@@ -501,7 +457,8 @@ const PerformanceChart: React.FC<PerformanceChartProps> = ({ completions }) => {
         </div>
       </div>
 
-      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
+      <div className="flex-1 flex items-center justify-center">
+        <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className="max-w-full">
         {/* Gridlines and Y labels */}
         {yTicks.map((t) => {
           const y = scaleY(t);
@@ -564,10 +521,11 @@ const PerformanceChart: React.FC<PerformanceChartProps> = ({ completions }) => {
             <stop offset="100%" stopColor="#60A5FA" stopOpacity={0} />
           </linearGradient>
         </defs>
-      </svg>
+        </svg>
+      </div>
 
       {/* Performance Summary */}
-      <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+      <div className="mt-4 grid grid-cols-3 gap-2 text-center">
         <div>
           <p className="text-xs text-gray-400">Avg Daily</p>
           <p className="text-sm font-semibold text-white">{(points.reduce((sum, p) => sum + p, 0) / 7).toFixed(0)} pts</p>

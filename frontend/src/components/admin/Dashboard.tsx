@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  Bell, 
-  TrendingUp, 
-  Users, 
-  Award, 
-  Calendar, 
-  CheckCircle, 
-  Eye, 
-  Settings, 
+import {
+  TrendingUp,
+  Users,
+  Award,
+  Calendar,
+  CheckCircle,
+  Eye,
+  Settings,
   UserCheck,
   AlertTriangle,
   Activity,
@@ -61,7 +60,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
   const [ambassadors, setAmbassadors] = useState<Ambassador[]>([]);
   const [recentTasks, setRecentTasks] = useState<TaskAssignment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState(8);
+
   const [selectedAmbassador, setSelectedAmbassador] = useState<Ambassador | null>(null);
   const [showAmbassadorModal, setShowAmbassadorModal] = useState(false);
 
@@ -246,10 +245,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
     fetchAdminData();
   }, []);
 
-  const handleNotificationClick = () => {
-    setNotifications(0);
-    alert('Admin notifications cleared!');
-  };
+
 
   const handleAmbassadorAction = (ambassador: Ambassador, action: string) => {
     switch (action) {
@@ -303,20 +299,6 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
       <div className="flex items-center justify-between p-6 border-b border-gray-800">
         <div className="flex items-center space-x-4">
           <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-        </div>
-        
-        <div className="flex items-center space-x-4">
-          <button 
-            onClick={handleNotificationClick}
-            className="relative p-2 text-gray-400 hover:text-white transition-colors"
-          >
-            <Bell className="h-6 w-6" />
-            {notifications > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                {notifications}
-              </span>
-            )}
-          </button>
         </div>
       </div>
 

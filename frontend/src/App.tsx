@@ -1,5 +1,4 @@
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { Sun, Moon } from 'lucide-react';
 // Theme Context
 type Theme = 'dark' | 'light';
 interface ThemeContextType {
@@ -617,7 +616,7 @@ const App: React.FC = () => {
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  const { theme } = useTheme();
 
   if (loading) {
     return (
@@ -627,19 +626,8 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // Theme toggle button for all pages (top right)
   return (
     <div className={theme === 'dark' ? 'bg-gray-900 text-white min-h-screen' : 'bg-white text-gray-900 min-h-screen'}>
-      <div className="w-full flex justify-end items-center p-4 border-b border-gray-800 sticky top-0 z-50 bg-inherit">
-        <button
-          onClick={toggleTheme}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-lg border border-gray-700 ${theme === 'dark' ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-gray-200 text-gray-900 hover:bg-gray-300'} transition-colors`}
-          aria-label="Toggle theme"
-        >
-          {theme === 'dark' ? <Sun className="h-5 w-5 text-yellow-400" /> : <Moon className="h-5 w-5 text-blue-500" />}
-          <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-        </button>
-      </div>
       {user ? <Dashboard /> : <LoginForm />}
     </div>
   );

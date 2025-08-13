@@ -25,12 +25,11 @@ interface LeaderboardProps {
 
 const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
-  const [period, setPeriod] = useState<'weekly' | 'monthly' | 'all_time'>('weekly');
   const [loading, setLoading] = useState(true);
   const [userRank, setUserRank] = useState<number>(0);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [modalEntry, setModalEntry] = useState<LeaderboardEntry | null>(null);
-  const { stats, completions, loading: taskLoading } = useTaskData();
+  const { stats, loading: taskLoading } = useTaskData();
 
 
 
@@ -239,22 +238,11 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
     fetchLeaderboard();
     // Also fetch user rank separately to ensure it's up to date
     fetchUserRank();
-  }, [period, user]);
-
-  const handlePeriodChange = (newPeriod: 'weekly' | 'monthly' | 'all_time') => {
-    setPeriod(newPeriod);
-    setLoading(true);
-    // Simulate loading for period change
-    setTimeout(() => setLoading(false), 500);
-  };
+  }, [user]);
 
   const handleViewProfile = (entry: LeaderboardEntry) => {
     setModalEntry(entry);
     setShowProfileModal(true);
-  };
-
-  const handleShareLeaderboard = () => {
-    alert('Sharing leaderboard...\n\nThis would typically open a share dialog or copy a link to the clipboard.');
   };
 
   const getRankIcon = (rank: number) => {
@@ -292,49 +280,16 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header with Leaderboard Title and Period Filters */}
+      {/* Header with Leaderboard Title */}
       <div className="flex items-center justify-between p-6 border-b border-gray-800">
         <div className="flex items-center space-x-4">
           <h1 className="text-2xl font-bold">Leaderboard</h1>
-        </div>
-        
-        <div className="flex items-center space-x-4">
-          <Button 
-            onClick={handleShareLeaderboard}
-            variant="default"
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            Share Leaderboard
-          </Button>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="p-6">
-        {/* Period Filters */}
-        <div className="flex items-center space-x-2 mb-6">
-          <Button
-            onClick={() => handlePeriodChange('weekly')}
-            variant={period === 'weekly' ? 'default' : 'outline'}
-            className={period === 'weekly' ? 'bg-blue-600' : 'border-gray-600 text-gray-300 hover:bg-gray-800'}
-          >
-            Weekly
-          </Button>
-          <Button
-            onClick={() => handlePeriodChange('monthly')}
-            variant={period === 'monthly' ? 'default' : 'outline'}
-            className={period === 'monthly' ? 'bg-blue-600' : 'border-gray-600 text-gray-300 hover:bg-gray-800'}
-          >
-            Monthly
-          </Button>
-          <Button
-            onClick={() => handlePeriodChange('all_time')}
-            variant={period === 'all_time' ? 'default' : 'outline'}
-            className={period === 'all_time' ? 'bg-blue-600' : 'border-gray-600 text-gray-300 hover:bg-gray-800'}
-          >
-            All Time
-          </Button>
-        </div>
+
 
         {/* Stats Overview (Total Participants, Top Score, Average Score, Your Rank) */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
@@ -520,9 +475,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
           <CardHeader>
             <CardTitle className="text-white">Top Performers</CardTitle>
             <CardDescription className="text-gray-400">
-              {period === 'weekly' ? 'This week\'s top performers' : 
-               period === 'monthly' ? 'This month\'s top performers' : 
-               'All-time top performers'}
+              All-time top performers
             </CardDescription>
           </CardHeader>
           <CardContent>

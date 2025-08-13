@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Upload, CheckCircle, AlertCircle, Calendar, Award, Clock, FileText, Image as ImageIcon, Send, Eye, Star, Lock, Users, ArrowLeft } from 'lucide-react';
+import { CheckCircle, Clock, FileText, Image as ImageIcon, Send, Star, Lock, Users, ArrowLeft, Download, X, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 
 const BACKEND_URL = 'http://127.0.0.1:5000';
 
@@ -14,10 +14,17 @@ interface Task {
   deadline: string;
   // priority: 'high' | 'medium' | 'low';
   status: 'available' | 'in_progress' | 'completed' | 'locked';
-  category: string;
+  // category: string;
   day: number;
   completedAt?: string;
-  estimatedTime?: string;
+  // estimatedTime?: string;
+}
+
+interface ProofFile {
+  filename: string;
+  content_type: string;
+  size: number;
+  data: string; // base64 encoded
 }
 
 interface Submission {
@@ -25,9 +32,10 @@ interface Submission {
   taskId: string;
   taskTitle: string;
   submissionText: string;
-  imageUrl?: string;
+  imageUrl?: string; // for backward compatibility
+  proofFiles?: ProofFile[]; // new multiple files support
   submittedAt: string;
-  completedAt?: string;
+  // completedAt?: string;
   status: 'completed';
   points: number;
   peopleConnected?: number;
@@ -38,7 +46,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [submissionText, setSubmissionText] = useState('');
-  const [submissionImage, setSubmissionImage] = useState<File | null>(null);
+  const [submissionFiles, setSubmissionFiles] = useState<File[]>([]);
   const [peopleConnected, setPeopleConnected] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -46,59 +54,79 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
   const [activeTab, setActiveTab] = useState<'available' | 'completed'>('available');
   const [viewMode, setViewMode] = useState<'list' | 'details'>('list');
   const [viewingTask, setViewingTask] = useState<Task | null>(null);
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string>('');
+  const [showProofModal, setShowProofModal] = useState(false);
+  const [selectedProofFiles, setSelectedProofFiles] = useState<ProofFile[]>([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   // Enhanced sample data
-  const sampleTasks: Task[] = Array.from({ length: 15 }, (_, idx) => {
-    const day = idx + 1;
-    const isAvailable = day <= 2;
-    const taskTypes = [
-      {
-        title: 'Social Media Campaign',
-        description: 'Create and share engaging posts about our brand on your social media platforms. Include relevant hashtags, tag our official account, and encourage engagement from your followers.',
-        category: 'Marketing',
-        estimatedTime: '2-3 hours'
-      },
-      {
-        title: 'Campus Event Promotion',
-        description: 'Promote our upcoming campus events by distributing flyers, posting on university notice boards, and spreading awareness through word-of-mouth marketing.',
-        category: 'Events',
-        estimatedTime: '3-4 hours'
-      },
-      {
-        title: 'Content Creation',
-        description: 'Create original content such as blog posts, videos, or infographics that showcase your ambassador experience and highlight our brand values.',
-        category: 'Content',
-        estimatedTime: '4-5 hours'
-      },
-      {
-        title: 'Student Outreach',
-        description: 'Connect with fellow students, organize meetups, and build a community around our brand. Focus on genuine relationship building and value creation.',
-        category: 'Networking',
-        estimatedTime: '2-3 hours'
-      },
-      {
-        title: 'Feedback Collection',
-        description: 'Gather feedback from students about our products/services, conduct surveys, and provide valuable insights to help improve our offerings.',
-        category: 'Research',
-        estimatedTime: '1-2 hours'
-      }
-    ];
-    
-    const taskType = taskTypes[day % taskTypes.length];
-    
-    return {
-      id: String(day),
-      title: `${taskType.title} - Day ${day}`,
-      description: taskType.description,
-      points: 100 + day * 10,
-      deadline: `Day ${day}`,
-      // priority: (day % 3 === 0 ? 'medium' : day % 2 === 0 ? 'high' : 'low') as 'high' | 'medium' | 'low',
-      status: (isAvailable ? 'available' : 'locked') as Task['status'],
-      category: taskType.category,
-      day,
-      estimatedTime: taskType.estimatedTime
-    };
-  });
+  const sampleTasks: Task[] = [
+    // Day 0: Orientation Task
+    {
+      id: '0',
+      title: 'Complete Orientation',
+      description: 'Watch the orientation video and read the company documents. This will help you understand our mission and how to be an effective ambassador.',
+      points: 100,
+      deadline: 'Day 0',
+      status: (localStorage.getItem('orientationCompleted') === 'true' ? 'completed' : 'available') as Task['status'],
+      // category: 'Orientation',
+      day: 0
+      // estimatedTime: '1-2 hours'
+    },
+    // Generate other tasks starting from Day 1
+    ...Array.from({ length: 14 }, (_, idx) => {
+      const day = idx + 1; // Start from Day 1 for promotional tasks
+      const isAvailable = day <= 2;
+      const taskTypes = [
+        {
+          title: 'Social Media Campaign',
+          description: 'Create and share engaging posts about our brand on your social media platforms. Include relevant hashtags, tag our official account, and encourage engagement from your followers.'
+          // category: 'Marketing',
+          // estimatedTime: '2-3 hours'
+        },
+        {
+          title: 'Campus Event Promotion',
+          description: 'Promote our upcoming campus events by distributing flyers, posting on university notice boards, and spreading awareness through word-of-mouth marketing.'
+          // category: 'Events',
+          // estimatedTime: '3-4 hours'
+        },
+        {
+          title: 'Content Creation',
+          description: 'Create original content such as blog posts, videos, or infographics that showcase your ambassador experience and highlight our brand values.'
+          // category: 'Content',
+          // estimatedTime: '4-5 hours'
+        },
+        {
+          title: 'Student Outreach',
+          description: 'Connect with fellow students, organize meetups, and build a community around our brand. Focus on genuine relationship building and value creation.'
+          // category: 'Networking',
+          // estimatedTime: '2-3 hours'
+        },
+        {
+          title: 'Feedback Collection',
+          description: 'Gather feedback from students about our products/services, conduct surveys, and provide valuable insights to help improve our offerings.'
+          // category: 'Research',
+          // estimatedTime: '1-2 hours'
+        }
+      ];
+
+      const taskType = taskTypes[(day - 1) % taskTypes.length];
+
+      return {
+        id: String(day),
+        title: `${taskType.title} - Day ${day}`,
+        description: taskType.description,
+        points: 100 + day * 10,
+        deadline: `Day ${day}`,
+        status: (isAvailable ? 'available' : 'locked') as Task['status'],
+        // category: taskType.category,
+        day
+        // estimatedTime: taskType.estimatedTime
+      };
+    })
+  ];
 
   const sampleSubmissions: Submission[] = [
     {
@@ -107,7 +135,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
       taskTitle: 'Student Outreach - Day 3',
       submissionText: 'Successfully connected with 15 students during the campus event. Organized a small meetup and collected valuable feedback about student preferences.',
       submittedAt: '2024-01-10T10:30:00Z',
-      completedAt: '2024-01-10T14:45:00Z',
+      // completedAt: '2024-01-10T14:45:00Z',
       status: 'completed',
       points: 180,
       peopleConnected: 15
@@ -115,11 +143,11 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
     {
       id: '2',
       taskId: '1',
-      taskTitle: 'Social Media Campaign - Day 1',
+      taskTitle: 'Social Media Campaign - Day 0',
       submissionText: 'Created and posted 5 engaging posts across Instagram, Twitter, and LinkedIn. Achieved 200+ likes and 50+ shares with proper hashtags and brand mentions.',
       imageUrl: '/sample-post.jpg',
       submittedAt: '2024-01-08T15:45:00Z',
-      completedAt: '2024-01-08T18:30:00Z',
+      // completedAt: '2024-01-08T18:30:00Z',
       status: 'completed',
       points: 150,
       peopleConnected: 8
@@ -130,7 +158,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
       taskTitle: 'Campus Event Promotion - Day 2',
       submissionText: 'Distributed 100 flyers across 5 different campus locations and posted announcements on 3 university notice boards. Also shared event details in 4 student WhatsApp groups.',
       submittedAt: '2024-01-09T09:15:00Z',
-      completedAt: '2024-01-09T16:20:00Z',
+      // completedAt: '2024-01-09T16:20:00Z',
       status: 'completed',
       points: 170,
       peopleConnected: 25
@@ -141,6 +169,33 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
   const availableTasks = tasks.filter(task => task.status === 'available').length;
   const completedTasks = submissions.length;
   const successRate = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
+
+  // Restore orientation completion from localStorage
+  useEffect(() => {
+    const orientationCompleted = localStorage.getItem('orientationCompleted');
+    const orientationCompletedAt = localStorage.getItem('orientationCompletedAt');
+
+    if (orientationCompleted === 'true' && orientationCompletedAt) {
+      // Add orientation submission if it doesn't already exist
+      setSubmissions(prevSubmissions => {
+        const orientationExists = prevSubmissions.some(sub => sub.taskId === '0');
+        if (!orientationExists) {
+          const orientationSubmission: Submission = {
+            id: 'orientation-' + Date.now(),
+            taskId: '0',
+            taskTitle: 'Complete Orientation',
+            submissionText: 'Orientation video watched and completed',
+            submittedAt: orientationCompletedAt,
+            // completedAt: orientationCompletedAt,
+            status: 'completed',
+            points: 100
+          };
+          return [...prevSubmissions, orientationSubmission];
+        }
+        return prevSubmissions;
+      });
+    }
+  }, []);
 
   // Data fetching
   useEffect(() => {
@@ -178,9 +233,22 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
           // Sort tasks by day to ensure proper order
           const sortedTasks = tasksData.sort((a: any, b: any) => a.day - b.day);
 
-          // Calculate how many tasks should be available (2 at a time, progressive unlocking)
-          const completedCount = completedTaskIds.size;
-          const maxAvailableTasks = Math.min(completedCount + 2, sortedTasks.length);
+          // Calculate progressive unlocking based on completed days
+          const completedDays = new Set(
+            submissionsData
+              .filter((sub: any) => sub.is_completed === true)
+              .map((sub: any) => {
+                const task = tasksData.find((t: any) => t.id === sub.task_id);
+                return task ? task.day : -1;
+              })
+              .filter((day: number) => day >= 0)
+          );
+
+          // Find the highest completed day
+          const highestCompletedDay = completedDays.size > 0 ? Math.max(...Array.from(completedDays) as number[]) : -1;
+
+          // Allow up to 2 tasks beyond the highest completed day to be available
+          const maxAvailableDay = highestCompletedDay + 2;
 
           // Transform backend data to match frontend interface with progressive unlocking
           const transformedTasks = sortedTasks.map((task: any, index: number) => {
@@ -189,7 +257,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
             // Determine task status
             if (completedTaskIds.has(task.id)) {
               status = 'completed';
-            } else if (index < maxAvailableTasks) {
+            } else if (task.day <= maxAvailableDay) {
               status = 'available';
             } else {
               status = 'locked';
@@ -203,9 +271,9 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
               deadline: `Day ${task.day}`,
               // priority: task.priority || 'medium',
               status,
-              category: task.category || 'General',
-              day: task.day,
-              estimatedTime: task.estimated_time || '2-3 hours'
+              // category: task.category || 'General',
+              day: task.day
+              // estimatedTime: task.estimated_time || '2-3 hours'
             };
           });
 
@@ -215,6 +283,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
             taskTitle: sub.task_title || 'Task',
             submissionText: sub.status_text,
             imageUrl: sub.proof_image ? `data:image/jpeg;base64,${sub.proof_image}` : undefined,
+            proofFiles: sub.proof_files || [],
             submittedAt: sub.submission_date,
             completedAt: sub.completion_date || sub.submission_date,
             status: 'completed',
@@ -244,17 +313,72 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
   // Event handlers
   const handleTaskSelect = (task: Task) => {
     if (task.status === 'available') {
+      // Special handling for orientation task
+      if (task.day === 0 && task.title === 'Complete Orientation') {
+        setShowVideoModal(true);
+        return;
+      }
+
       setSelectedTask(task);
       setViewMode('details'); // Switch to details view immediately
       setViewingTask(task); // Set the viewing task to show submission form
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSubmissionImage(file);
+  const handleCompleteOrientation = async () => {
+    try {
+      // Close the modal first
+      setShowVideoModal(false);
+
+      // Store completion in localStorage for persistence
+      localStorage.setItem('orientationCompleted', 'true');
+      localStorage.setItem('orientationCompletedAt', new Date().toISOString());
+
+      // Update the task status to completed
+      setTasks(prevTasks =>
+        prevTasks.map(task =>
+          task.day === 0 && task.title === 'Complete Orientation'
+            ? { ...task, status: 'completed' as Task['status'] }
+            : task
+        )
+      );
+
+      // Add to submissions
+      const newSubmission: Submission = {
+        id: Date.now().toString(),
+        taskId: '0',
+        taskTitle: 'Complete Orientation',
+        submissionText: 'Orientation video watched and completed',
+        submittedAt: new Date().toISOString(),
+        // completedAt: new Date().toISOString(),
+        status: 'completed',
+        points: 100
+      };
+
+      setSubmissions(prevSubmissions => [...prevSubmissions, newSubmission]);
+
+      // Optional: Make API call to save completion
+      // await fetch(`${BACKEND_URL}/api/tasks/0/complete`, {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ submissionText: 'Orientation completed' })
+      // });
+
+    } catch (error) {
+      console.error('Error completing orientation:', error);
     }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      const fileArray = Array.from(files);
+      setSubmissionFiles(prev => [...prev, ...fileArray]);
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setSubmissionFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmitTask = async () => {
@@ -262,6 +386,13 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
       alert('Please provide submission details.');
       return;
     }
+
+    if (submissionFiles.length === 0) {
+      alert('Please upload at least one file (PDF or image).');
+      return;
+    }
+
+    // No need to warn about multiple files anymore - backend supports them!
 
     setSubmitting(true);
     try {
@@ -271,47 +402,56 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
         return;
       }
 
-      let response;
-      
-      if (submissionImage) {
-        const formData = new FormData();
-        formData.append('task_id', selectedTask.id);
-        formData.append('status_text', submissionText);
-        formData.append('people_connected', peopleConnected.toString());
-        formData.append('image', submissionImage);
+      const formData = new FormData();
+      formData.append('task_id', selectedTask.id);
+      formData.append('status_text', submissionText);
+      formData.append('people_connected', peopleConnected.toString());
 
-        response = await fetch(`${BACKEND_URL}/api/submit-task-with-image`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` },
-          body: formData,
-        });
-      } else {
-        response = await fetch(`${BACKEND_URL}/api/submit-task`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            task_id: selectedTask.id,
-            status_text: submissionText,
-            people_connected: peopleConnected
-          }),
-        });
-      }
+      // Append all files to the form data
+      submissionFiles.forEach((file) => {
+        formData.append('files', file);
+      });
+
+      const response = await fetch(`${BACKEND_URL}/api/submit-task-with-files`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+      });
 
       if (response.ok) {
         const result = await response.json();
         const completionTime = new Date().toISOString();
         
+        // Create proof files array from submitted files
+        const proofFiles: ProofFile[] = await Promise.all(
+          submissionFiles.map(async (file) => {
+            const base64 = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const result = reader.result as string;
+                resolve(result.split(',')[1]); // Remove data:type;base64, prefix
+              };
+              reader.readAsDataURL(file);
+            });
+
+            return {
+              filename: file.name,
+              content_type: file.type,
+              size: file.size,
+              data: base64
+            };
+          })
+        );
+
         const newSubmission: Submission = {
           id: Date.now().toString(),
           taskId: selectedTask.id,
           taskTitle: selectedTask.title,
           submissionText,
-          imageUrl: submissionImage ? URL.createObjectURL(submissionImage) : undefined,
+          imageUrl: submissionFiles.length > 0 ? URL.createObjectURL(submissionFiles[0]) : undefined,
+          proofFiles: proofFiles,
           submittedAt: completionTime,
-          completedAt: completionTime,
+          // completedAt: completionTime,
           status: 'completed',
           points: result.points_earned || selectedTask.points,
           peopleConnected: peopleConnected
@@ -326,12 +466,13 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
         
         setSelectedTask(null);
         setSubmissionText('');
-        setSubmissionImage(null);
+        setSubmissionFiles([]);
         setPeopleConnected(0);
         setViewMode('list');
         setViewingTask(null);
 
-        alert(`Task submitted successfully! You earned ${result.points_earned || selectedTask.points} points.`);
+        const filesText = result.files_uploaded ? ` with ${result.files_uploaded} file${result.files_uploaded > 1 ? 's' : ''}` : '';
+        alert(`Task submitted successfully${filesText}! You earned ${result.points_earned || selectedTask.points} points.`);
       } else {
         const errorData = await response.json();
         alert(`Error submitting task: ${errorData.detail || 'Please try again.'}`);
@@ -354,8 +495,33 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
     setViewingTask(null);
     setSelectedTask(null);
     setSubmissionText('');
-    setSubmissionImage(null);
+    setSubmissionFiles([]);
     setPeopleConnected(0);
+  };
+
+  const handleViewProofFiles = (proofFiles: ProofFile[]) => {
+    setSelectedProofFiles(proofFiles);
+    setCurrentImageIndex(0);
+    setShowProofModal(true);
+  };
+
+  const getFileIcon = (contentType: string) => {
+    if (contentType.startsWith('image/')) {
+      return <ImageIcon className="h-6 w-6 text-blue-400" />;
+    } else if (contentType === 'application/pdf') {
+      return <FileText className="h-6 w-6 text-red-400" />;
+    } else {
+      return <FileText className="h-6 w-6 text-gray-400" />;
+    }
+  };
+
+  const downloadFile = (file: ProofFile) => {
+    const link = document.createElement('a');
+    link.href = `data:${file.content_type};base64,${file.data}`;
+    link.download = file.filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const getStatusColor = (status: string) => {
@@ -376,7 +542,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
       case 'locked':
         return <Lock className="h-4 w-4 text-gray-500" />;
       default:
-        return <Clock className="h-4 w-4 text-gray-400" />;
+        // return <Clock className="h-4 w-4 text-gray-400" />;
     }
   };
 
@@ -484,20 +650,25 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                 {/* Tasks Grid - More Broadly Visible */}
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                   {tasks
-                    .filter(task =>
-                      (task.status === 'available' || task.status === 'completed')
-                    )
+                    .filter(task => task.status === 'available' || task.status === 'completed')
                     .map((task) => (
                     <Card
                       key={task.id}
-                      className={`transition-all duration-200 hover:shadow-lg ${
+                      className={`transition-all duration-200 hover:shadow-lg cursor-pointer ${
                         task.status === 'completed'
                           ? 'bg-green-900 border-green-600 hover:border-green-500'
-                          : 'bg-gray-800 border-gray-700 cursor-pointer hover:border-blue-500'
+                          : 'bg-gray-800 border-gray-700 hover:border-blue-500'
                       } ${
                         selectedTask?.id === task.id ? 'ring-2 ring-blue-500 border-blue-500' : ''
                       }`}
-                      onClick={() => task.status === 'available' && handleTaskSelect(task)}
+                      onClick={() => {
+                        if (task.status === 'available') {
+                          handleTaskSelect(task);
+                        } else if (task.status === 'completed') {
+                          // For completed tasks, just show them as selected for visual feedback
+                          setSelectedTask(task);
+                        }
+                      }}
                     >
                       <CardHeader className="pb-3">
                         <div className="flex items-start justify-between">
@@ -520,7 +691,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                               <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                 task.status === 'completed' ? 'bg-green-800 text-green-200' : 'bg-blue-900 text-blue-300'
                               }`}>
-                                {task.category}
+                                {/* {task.category} */}
                               </span>
                             </div>
                           </div>
@@ -545,15 +716,10 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                             <div className={`flex items-center space-x-1 ${
                               task.status === 'completed' ? 'text-green-300' : 'text-gray-400'
                             }`}>
-                              <Clock className="h-4 w-4" />
-                              <span>{task.estimatedTime}</span>
+                              {/* <Clock className="h-4 w-4" /> */}
+                              {/* <span>{task.estimatedTime}</span> */}
                             </div>
-                            <div className={`flex items-center space-x-1 ${
-                              task.status === 'completed' ? 'text-green-300' : 'text-gray-400'
-                            }`}>
-                              <Calendar className="h-4 w-4" />
-                              <span>{task.deadline}</span>
-                            </div>
+
                           </div>
                           {task.status === 'available' && (
                             <div className="flex items-center space-x-2">
@@ -607,7 +773,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                                     Locked
                                   </span>
                                   <span className="px-2 py-1 bg-gray-800 text-gray-400 rounded-full text-xs font-medium">
-                                    {task.category}
+                                    {/* {task.category} */}
                                   </span>
                                 </div>
                               </div>
@@ -624,13 +790,10 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                             <div className="flex items-center justify-between text-sm">
                               <div className="flex items-center space-x-4">
                                 <div className="flex items-center space-x-1 text-gray-500">
-                                  <Clock className="h-4 w-4" />
-                                  <span>{task.estimatedTime}</span>
+                                  {/* <Clock className="h-4 w-4" /> */}
+                                  {/* <span>{task.estimatedTime}</span> */}
                                 </div>
-                                <div className="flex items-center space-x-1 text-gray-500">
-                                  <Calendar className="h-4 w-4" />
-                                  <span>{task.deadline}</span>
-                                </div>
+
                               </div>
                               <span className="text-gray-500 text-sm">Complete previous tasks to unlock</span>
                             </div>
@@ -672,7 +835,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                               {/* {viewingTask.priority} priority */}
                             </span>
                             <span className="px-3 py-1 bg-blue-900 text-blue-300 rounded-full text-sm font-medium">
-                              {viewingTask.category}
+                              {/* {viewingTask.category} */}
                             </span>
                             <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                               viewingTask.status === 'available' ? 'bg-green-900 text-green-300' :
@@ -696,25 +859,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                         <p className="text-gray-300 leading-relaxed">{viewingTask.description}</p>
                       </div>
 
-                      {/* Task Details Grid */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-gray-700 rounded-lg p-4">
-                          <p className="text-gray-400 text-sm mb-1">Day</p>
-                          <p className="text-white font-semibold">{viewingTask.day}</p>
-                        </div>
-                        <div className="bg-gray-700 rounded-lg p-4">
-                          <p className="text-gray-400 text-sm mb-1">Estimated Time</p>
-                          <p className="text-white font-semibold">{viewingTask.estimatedTime}</p>
-                        </div>
-                        <div className="bg-gray-700 rounded-lg p-4">
-                          <p className="text-gray-400 text-sm mb-1">Deadline</p>
-                          <p className="text-white font-semibold">{viewingTask.deadline}</p>
-                        </div>
-                        <div className="bg-gray-700 rounded-lg p-4">
-                          <p className="text-gray-400 text-sm mb-1">Category</p>
-                          <p className="text-white font-semibold">{viewingTask.category}</p>
-                        </div>
-                      </div>
+
 
                       {/* Guidelines */}
                       <div className="bg-gray-700 rounded-lg p-6">
@@ -753,23 +898,43 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
 
                             <div>
                               <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Upload Image (Optional)
+                                Upload Files (Required) *
                               </label>
                               <div className="border-2 border-dashed border-gray-500 rounded-lg p-4 text-center">
                                 <input
                                   type="file"
-                                  accept="image/*"
-                                  onChange={handleImageUpload}
+                                  accept="image/*,.pdf"
+                                  multiple
+                                  onChange={handleFileUpload}
                                   className="hidden"
-                                  id="image-upload-details"
+                                  id="file-upload-details"
                                 />
-                                <label htmlFor="image-upload-details" className="cursor-pointer">
+                                <label htmlFor="file-upload-details" className="cursor-pointer">
                                   <ImageIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
                                   <p className="text-gray-400 text-sm">
-                                    {submissionImage ? submissionImage.name : 'Click to upload image'}
+                                    Click to upload files (Images & PDFs)
                                   </p>
                                 </label>
                               </div>
+
+                              {/* Display uploaded files */}
+                              {submissionFiles.length > 0 && (
+                                <div className="mt-3 space-y-2">
+                                  <p className="text-sm text-gray-300">Uploaded files:</p>
+                                  {submissionFiles.map((file, index) => (
+                                    <div key={index} className="flex items-center justify-between bg-gray-600 rounded p-2">
+                                      <span className="text-sm text-gray-300">{file.name}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => removeFile(index)}
+                                        className="text-red-400 hover:text-red-300 text-sm"
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
 
                             <div>
@@ -797,7 +962,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                               </Button>
                               <Button
                                 onClick={handleSubmitTask}
-                                disabled={!submissionText.trim() || submitting}
+                                disabled={!submissionText.trim() || submissionFiles.length === 0 || submitting}
                                 className="bg-green-600 hover:bg-green-700 disabled:opacity-50"
                               >
                                 {submitting ? (
@@ -854,6 +1019,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
         {activeTab === 'completed' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 gap-4">
+              {/* Show submissions */}
               {submissions.length > 0 ? (
                 submissions.map((submission) => (
                   <Card key={submission.id} className="bg-gray-800 border-gray-700">
@@ -882,17 +1048,15 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                           <div className="text-gray-400 text-sm">
                             {new Date(submission.submittedAt).toLocaleTimeString()}
                           </div>
-                          {submission.completedAt && (
-                            <>
-                              <div className="text-sm text-gray-400 mb-1 mt-2">Completed</div>
-                              <div className="text-green-400 font-medium">
-                                {new Date(submission.completedAt).toLocaleDateString()}
-                              </div>
-                              <div className="text-gray-400 text-sm">
-                                {new Date(submission.completedAt).toLocaleTimeString()}
-                              </div>
-                            </>
-                          )}
+                          {/* Commented out completed date section
+                          <div className="text-sm text-gray-400 mb-1 mt-2">Completed</div>
+                          <div className="text-green-400 font-medium">
+                            {new Date(submission.completedAt).toLocaleDateString()}
+                          </div>
+                          <div className="text-gray-400 text-sm">
+                            {new Date(submission.completedAt).toLocaleTimeString()}
+                          </div>
+                          */}
                         </div>
                       </div>
 
@@ -901,20 +1065,38 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                         <p className="text-gray-300 text-sm leading-relaxed">{submission.submissionText}</p>
                       </div>
 
-                      {submission.imageUrl && (
+                      {(submission.proofFiles && submission.proofFiles.length > 0) || submission.imageUrl ? (
                         <div className="bg-gray-700 rounded-lg p-4">
-                          <h4 className="text-white font-medium mb-2">Proof Image</h4>
-                          <img
-                            src={submission.imageUrl}
-                            alt="Submission proof"
-                            className="max-w-full h-auto rounded-lg border border-gray-600"
-                          />
+                          <h4 className="text-white font-medium mb-2">Proof Files</h4>
+                          <div
+                            className="inline-flex items-center space-x-2 cursor-pointer hover:bg-gray-600 p-2 rounded-lg transition-colors"
+                            onClick={() => {
+                              if (submission.proofFiles && submission.proofFiles.length > 0) {
+                                handleViewProofFiles(submission.proofFiles);
+                              } else if (submission.imageUrl) {
+                                // Fallback for old single image format
+                                setSelectedImageUrl(submission.imageUrl);
+                                setShowImageModal(true);
+                              }
+                            }}
+                          >
+                            <Eye className="h-6 w-6 text-blue-400" />
+                            <span className="text-blue-400 text-sm hover:text-blue-300">
+                              {submission.proofFiles && submission.proofFiles.length > 0
+                                ? `View proof files (${submission.proofFiles.length})`
+                                : 'Click to view proof image'
+                              }
+                            </span>
+                          </div>
                         </div>
-                      )}
+                      ) : null}
                     </CardContent>
                   </Card>
                 ))
-              ) : (
+              ) : null}
+
+              {/* Show "No completed tasks" message only if submissions are empty */}
+              {submissions.length === 0 && (
                 <Card className="bg-gray-800 border-gray-700">
                   <CardContent className="p-12 text-center">
                     <CheckCircle className="h-16 w-16 text-gray-400 mx-auto mb-4" />
@@ -929,6 +1111,228 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
           </div>
         )}
 
+        {/* Orientation Video Modal */}
+        <div className={`${showVideoModal ? 'fixed' : 'hidden'} inset-0 z-50 flex items-center justify-center`}
+             role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowVideoModal(false)}></div>
+          <div className="relative w-full max-w-3xl mx-4 bg-gray-900 rounded-lg border border-gray-700 shadow-xl">
+            <div className="flex items-center justify-between p-4 border-b border-gray-800">
+              <h3 className="text-lg font-semibold text-white">Orientation Video</h3>
+              <button
+                onClick={() => setShowVideoModal(false)}
+                className="text-gray-400 hover:text-white"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="w-full rounded-lg overflow-hidden bg-black">
+                <video controls className="w-full h-64 md:h-96">
+                  <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4" />
+                  Your browser does not support the video tag.
+                </video>
+              </div>
+              <p className="text-gray-300 text-sm mt-3">
+                Watch this brief orientation to get started. After completing, you will understand our mission and how to be an effective ambassador.
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <Button
+                  onClick={() => setShowVideoModal(false)}
+                  variant="outline"
+                  className="border-gray-700 text-gray-300 hover:bg-gray-800"
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={() => {
+                    handleCompleteOrientation();
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  Mark as Watched
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Image Modal */}
+        {showImageModal && selectedImageUrl && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true">
+            <div className="absolute inset-0 bg-black/80" onClick={() => setShowImageModal(false)}></div>
+            <div className="relative max-w-4xl max-h-[90vh] mx-4 bg-gray-900 rounded-lg border border-gray-700 shadow-xl overflow-hidden">
+              <div className="flex items-center justify-between p-4 border-b border-gray-800">
+                <h3 className="text-lg font-semibold text-white">Proof Image</h3>
+                <button
+                  onClick={() => setShowImageModal(false)}
+                  className="text-gray-400 hover:text-white text-xl"
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="p-4">
+                <img
+                  src={selectedImageUrl}
+                  alt="Submission proof"
+                  className="max-w-full max-h-[70vh] object-contain mx-auto rounded-lg"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Proof Files Modal */}
+        {showProofModal && selectedProofFiles.length > 0 && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true">
+            <div className="absolute inset-0 bg-black/80" onClick={() => setShowProofModal(false)}></div>
+            <div className="relative w-full max-w-6xl max-h-[90vh] mx-4 bg-gray-900 rounded-lg border border-gray-700 shadow-xl overflow-hidden">
+              <div className="flex items-center justify-between p-4 border-b border-gray-800">
+                <h3 className="text-lg font-semibold text-white">
+                  Proof Files ({selectedProofFiles.length})
+                </h3>
+                <button
+                  onClick={() => setShowProofModal(false)}
+                  className="text-gray-400 hover:text-white text-xl"
+                  aria-label="Close"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="p-6 max-h-[80vh] overflow-y-auto">
+                {/* Images Section */}
+                {(() => {
+                  const images = selectedProofFiles.filter(file => file.content_type.startsWith('image/'));
+                  const pdfs = selectedProofFiles.filter(file => file.content_type === 'application/pdf');
+
+                  return (
+                    <div className="space-y-6">
+                      {images.length > 0 && (
+                        <div>
+                          <h4 className="text-white font-medium mb-4 flex items-center">
+                            <ImageIcon className="h-5 w-5 mr-2 text-blue-400" />
+                            Images ({images.length})
+                          </h4>
+
+                          {images.length === 1 ? (
+                            // Single image - show full size
+                            <div className="bg-gray-800 rounded-lg p-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="text-gray-300 text-sm">{images[0].filename}</span>
+                                <button
+                                  onClick={() => downloadFile(images[0])}
+                                  className="text-blue-400 hover:text-blue-300 text-sm flex items-center"
+                                >
+                                  <Download className="h-4 w-4 mr-1" />
+                                  Download
+                                </button>
+                              </div>
+                              <img
+                                src={`data:${images[0].content_type};base64,${images[0].data}`}
+                                alt={images[0].filename}
+                                className="max-w-full max-h-[60vh] object-contain mx-auto rounded-lg"
+                              />
+                            </div>
+                          ) : (
+                            // Multiple images - show with navigation
+                            <div className="bg-gray-800 rounded-lg p-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center space-x-4">
+                                  <button
+                                    onClick={() => setCurrentImageIndex(Math.max(0, currentImageIndex - 1))}
+                                    disabled={currentImageIndex === 0}
+                                    className="text-blue-400 hover:text-blue-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+                                  >
+                                    <ChevronLeft className="h-6 w-6" />
+                                  </button>
+                                  <span className="text-gray-300 text-sm">
+                                    {currentImageIndex + 1} of {images.length}: {images[currentImageIndex].filename}
+                                  </span>
+                                  <button
+                                    onClick={() => setCurrentImageIndex(Math.min(images.length - 1, currentImageIndex + 1))}
+                                    disabled={currentImageIndex === images.length - 1}
+                                    className="text-blue-400 hover:text-blue-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+                                  >
+                                    <ChevronRight className="h-6 w-6" />
+                                  </button>
+                                </div>
+                                <button
+                                  onClick={() => downloadFile(images[currentImageIndex])}
+                                  className="text-blue-400 hover:text-blue-300 text-sm flex items-center"
+                                >
+                                  <Download className="h-4 w-4 mr-1" />
+                                  Download
+                                </button>
+                              </div>
+                              <img
+                                src={`data:${images[currentImageIndex].content_type};base64,${images[currentImageIndex].data}`}
+                                alt={images[currentImageIndex].filename}
+                                className="max-w-full max-h-[50vh] object-contain mx-auto rounded-lg"
+                              />
+
+                              {/* Thumbnail navigation */}
+                              <div className="flex justify-center mt-4 space-x-2 overflow-x-auto pb-2">
+                                {images.map((image, index) => (
+                                  <button
+                                    key={index}
+                                    onClick={() => setCurrentImageIndex(index)}
+                                    className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 ${
+                                      index === currentImageIndex ? 'border-blue-400' : 'border-gray-600'
+                                    }`}
+                                  >
+                                    <img
+                                      src={`data:${image.content_type};base64,${image.data}`}
+                                      alt={`Thumbnail ${index + 1}`}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* PDFs Section */}
+                      {pdfs.length > 0 && (
+                        <div>
+                          <h4 className="text-white font-medium mb-4 flex items-center">
+                            <FileText className="h-5 w-5 mr-2 text-red-400" />
+                            PDF Documents ({pdfs.length})
+                          </h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {pdfs.map((pdf, index) => (
+                              <div key={index} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                                <div className="flex items-center space-x-3 mb-3">
+                                  <FileText className="h-8 w-8 text-red-400" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-white text-sm font-medium truncate">{pdf.filename}</p>
+                                    <p className="text-gray-400 text-xs">
+                                      {(pdf.size / 1024).toFixed(1)} KB
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => downloadFile(pdf)}
+                                  className="w-full bg-red-600 hover:bg-red-700 text-white text-sm py-2 px-4 rounded-lg flex items-center justify-center transition-colors"
+                                >
+                                  <Download className="h-4 w-4 mr-2" />
+                                  Download PDF
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
