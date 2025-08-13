@@ -70,7 +70,16 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser, logout }) => {
       if (response.ok) {
         setPasswordSuccess('Password changed successfully!');
         setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
-        setShowPasswordModal(false);
+
+        // Show success message for 2 seconds before closing modal
+        setTimeout(() => {
+          setShowPasswordModal(false);
+          setPasswordSuccess(null);
+          // Also set global success message
+          setSuccess('Password updated successfully!');
+          // Clear global success message after 5 seconds
+          setTimeout(() => setSuccess(null), 5000);
+        }, 2000);
       } else {
         const errorData = await response.json();
         setPasswordError(errorData.detail || 'Failed to change password');

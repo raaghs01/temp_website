@@ -817,6 +817,31 @@ async def get_ambassadors(current_user: User = Depends(get_current_user)):
         for ambassador in ambassadors
     ]
 
+# Change password endpoint
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+@api_router.post("/change-password")
+async def change_password(
+    data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user)
+):
+    # Verify old password
+    if not verify_password(data.old_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Old password is incorrect")
+
+    # Hash new password
+    new_password_hash = hash_password(data.new_password)
+
+    # Update password in database
+    await db.users.update_one(
+        {"id": current_user.id},
+        {"$set": {"password_hash": new_password_hash}}
+    )
+
+    return {"message": "Password changed successfully"}
+
 # Initialize tasks on startup
 @app.on_event("startup")
 async def startup_event():
@@ -843,32 +868,6 @@ logger = logging.getLogger(__name__)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
-
-
-# Change password endpoint
-class ChangePasswordRequest(BaseModel):
-    old_password: str
-    new_password: str
-
-@api_router.post("/change-password")
-async def change_password(
-    data: ChangePasswordRequest,
-    current_user: User = Depends(get_current_user)
-):
-    # Verify old password
-    if not verify_password(data.old_password, current_user.password_hash):
-        raise HTTPException(status_code=400, detail="Old password is incorrect")
-
-    # Hash new password
-    new_password_hash = hash_password(data.new_password)
-
-    # Update password in database
-    await db.users.update_one(
-        {"id": current_user.id},
-        {"$set": {"password_hash": new_password_hash}}
-    )
-
-    return {"message": "Password changed successfully"}
 
 if __name__ == "__main__":
     import uvicorn
