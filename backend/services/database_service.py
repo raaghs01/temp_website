@@ -52,12 +52,12 @@ class DatabaseService:
         )
         return result.scalars().all()
     
-    async def create_task(self, task_data: dict) -> str:
+    async def create_task(self, task_data: dict) -> Task:
         task = Task(**task_data)
         self.session.add(task)
         await self.session.commit()
         await self.session.refresh(task)
-        return task.id
+        return task
     
     async def get_task_by_id(self, task_id: str) -> Optional[Task]:
         result = await self.session.execute(
@@ -122,6 +122,50 @@ class DatabaseService:
             .limit(limit)
         )
         return result.scalars().all()
+
+    async def get_all_ambassadors(self) -> List[User]:
+        result = await self.session.execute(
+            select(User)
+            .where(User.role == "ambassador")
+            .order_by(desc(User.total_points))
+        )
+        return result.scalars().all()
+
+    async def get_detailed_submissions(self, group_leader: str = None, start_date: str = None, end_date: str = None) -> List[Submission]:
+        query = select(Submission).options(
+            selectinload(Submission.user),
+            selectinload(Submission.task)
+        )
+
+        conditions = []
+
+        # Filter by group leader if specified
+        if group_leader and group_leader != "all":
+            conditions.append(User.group_leader_name == group_leader)
+            query = query.join(User, Submission.user_id == User.id)
+
+        # Filter by date range if specified
+        if start_date:
+            try:
+                start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                conditions.append(Submission.submission_date >= start_dt)
+            except ValueError:
+                pass
+
+        if end_date:
+            try:
+                end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                conditions.append(Submission.submission_date <= end_dt)
+            except ValueError:
+                pass
+
+        if conditions:
+            query = query.where(and_(*conditions))
+
+        query = query.order_by(desc(Submission.submission_date))
+
+        result = await self.session.execute(query)
+        return result.scalars().all()
     
     async def get_user_analytics(self, user_id: str, days: int = 30) -> List[Analytics]:
         start_date = datetime.utcnow() - timedelta(days=days)
@@ -162,6 +206,15 @@ class DatabaseService:
         await self.session.commit()
         return result.rowcount > 0
 
+    async def update_user_profile(self, user_id: str, profile_data: dict) -> bool:
+        result = await self.session.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(**profile_data)
+        )
+        await self.session.commit()
+        return result.rowcount > 0
+
     async def get_all_users(self) -> List[User]:
         result = await self.session.execute(
             select(User).order_by(desc(User.registration_date))
@@ -173,3 +226,49 @@ class DatabaseService:
             select(Submission).order_by(desc(Submission.submission_date))
         )
         return result.scalars().all()
+
+    # Admin task management methods
+    async def get_all_tasks(self) -> List[Task]:
+        """Get all tasks including inactive ones for admin"""
+        result = await self.session.execute(
+            select(Task).order_by(Task.day)
+        )
+        return result.scalars().all()
+
+    async def update_task(self, task_id: str, update_data: dict) -> Task:
+        """Update a task with new data"""
+        result = await self.session.execute(
+            select(Task).where(Task.id == task_id)
+        )
+        task = result.scalar_one_or_none()
+
+        if not task:
+            raise ValueError(f"Task with id {task_id} not found")
+
+        # Update fields
+        for key, value in update_data.items():
+            if hasattr(task, key):
+                setattr(task, key, value)
+
+        # Update timestamp
+        task.updated_at = datetime.utcnow()
+
+        await self.session.commit()
+        await self.session.refresh(task)
+        return task
+
+    async def delete_task(self, task_id: str) -> bool:
+        """Delete a task by ID"""
+        result = await self.session.execute(
+            select(Task).where(Task.id == task_id)
+        )
+        task = result.scalar_one_or_none()
+
+        if not task:
+            return False
+
+        await self.session.delete(task)
+        await self.session.commit()
+        return True
+
+
