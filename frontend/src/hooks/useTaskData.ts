@@ -18,7 +18,6 @@ export const useTaskData = (autoRefresh: boolean = true): UseTaskDataReturn => {
     completedTasks: 0,
     totalPoints: 0,
     totalPeopleConnected: 0,
-    completionRate: 0,
     averagePointsPerTask: 0,
     categoryBreakdown: {},
     monthlyProgress: [],
@@ -146,8 +145,7 @@ export const useFilteredTaskData = (filters: {
       completedTasks: filteredCompletions.length,
       totalPoints: filteredCompletions.reduce((sum, comp) => sum + comp.points, 0),
       totalPeopleConnected: filteredCompletions.reduce((sum, comp) => sum + comp.peopleConnected, 0),
-      completionRate: filteredTasks.length > 0 ? (filteredCompletions.length / filteredTasks.length) * 100 : 0,
-      averagePointsPerTask: filteredCompletions.length > 0 ? 
+      averagePointsPerTask: filteredCompletions.length > 0 ?
         filteredCompletions.reduce((sum, comp) => sum + comp.points, 0) / filteredCompletions.length : 0,
       categoryBreakdown: filteredCompletions.reduce((acc, comp) => {
         acc[comp.category] = (acc[comp.category] || 0) + 1;

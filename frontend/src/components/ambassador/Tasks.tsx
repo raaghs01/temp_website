@@ -61,7 +61,36 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
   const [selectedProofFiles, setSelectedProofFiles] = useState<ProofFile[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
-  // Enhanced sample data
+  // Get user registration date for deadline calculations
+  const getUserRegistrationDate = () => {
+    const registrationDate = localStorage.getItem('userRegistrationDate');
+    if (registrationDate) {
+      return new Date(registrationDate);
+    }
+    // Fallback to current date if not found
+    const fallbackDate = new Date();
+    localStorage.setItem('userRegistrationDate', fallbackDate.toISOString());
+    return fallbackDate;
+  };
+
+  // Calculate days since registration
+  const getDaysSinceRegistration = () => {
+    const registrationDate = getUserRegistrationDate();
+    const currentDate = new Date();
+    const diffTime = Math.abs(currentDate.getTime() - registrationDate.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays + 1; // +1 because day 1 starts on registration day
+  };
+
+  // Check if task is past deadline
+  const isTaskPastDeadline = (taskDay: number) => {
+    const daysSinceRegistration = getDaysSinceRegistration();
+    // Tasks expire 2 days after they become available
+    // Day 1-2 tasks expire on day 3, Day 3 task expires on day 5, etc.
+    return daysSinceRegistration > taskDay + 1;
+  };
+
+  // Enhanced sample data with 15 tasks
   const sampleTasks: Task[] = [
     // Day 0: Orientation Task
     {
@@ -71,59 +100,90 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
       points: 100,
       deadline: 'Day 0',
       status: (localStorage.getItem('orientationCompleted') === 'true' ? 'completed' : 'available') as Task['status'],
-      // category: 'Orientation',
       day: 0
-      // estimatedTime: '1-2 hours'
     },
-    // Generate other tasks starting from Day 1
-    ...Array.from({ length: 14 }, (_, idx) => {
+    // Generate other tasks starting from Day 1 to Day 15
+    ...Array.from({ length: 15 }, (_, idx) => {
       const day = idx + 1; // Start from Day 1 for promotional tasks
-      const isAvailable = day <= 2;
+      const daysSinceRegistration = getDaysSinceRegistration();
+
+      // Task availability logic:
+      // Day 1-2: Available from day 1
+      // Day 3: Available from day 3
+      // Day 4: Available from day 4, etc.
+      let isAvailable = false;
+      if (day <= 2) {
+        isAvailable = daysSinceRegistration >= 1;
+      } else {
+        isAvailable = daysSinceRegistration >= day;
+      }
+
+      // Check if task is past deadline
+      const isPastDeadline = isTaskPastDeadline(day);
+
       const taskTypes = [
         {
           title: 'Social Media Campaign',
           description: 'Create and share engaging posts about our brand on your social media platforms. Include relevant hashtags, tag our official account, and encourage engagement from your followers.'
-          // category: 'Marketing',
-          // estimatedTime: '2-3 hours'
         },
         {
           title: 'Campus Event Promotion',
           description: 'Promote our upcoming campus events by distributing flyers, posting on university notice boards, and spreading awareness through word-of-mouth marketing.'
-          // category: 'Events',
-          // estimatedTime: '3-4 hours'
         },
         {
           title: 'Content Creation',
           description: 'Create original content such as blog posts, videos, or infographics that showcase your ambassador experience and highlight our brand values.'
-          // category: 'Content',
-          // estimatedTime: '4-5 hours'
         },
         {
           title: 'Student Outreach',
           description: 'Connect with fellow students, organize meetups, and build a community around our brand. Focus on genuine relationship building and value creation.'
-          // category: 'Networking',
-          // estimatedTime: '2-3 hours'
         },
         {
           title: 'Feedback Collection',
           description: 'Gather feedback from students about our products/services, conduct surveys, and provide valuable insights to help improve our offerings.'
-          // category: 'Research',
-          // estimatedTime: '1-2 hours'
+        },
+        {
+          title: 'Workshop Organization',
+          description: 'Organize educational workshops or seminars related to your field of study. Invite fellow students and create valuable learning experiences.'
+        },
+        {
+          title: 'Brand Ambassador Recruitment',
+          description: 'Identify and recruit potential brand ambassadors from your network. Help expand our ambassador program with quality candidates.'
+        },
+        {
+          title: 'Product Review & Testing',
+          description: 'Test our latest products/services and provide detailed reviews. Share your honest feedback and user experience insights.'
+        },
+        {
+          title: 'Community Building',
+          description: 'Build and nurture online communities around our brand. Engage with followers and create meaningful discussions.'
+        },
+        {
+          title: 'Partnership Development',
+          description: 'Identify potential partnership opportunities with student organizations, clubs, or local businesses that align with our brand values.'
         }
       ];
 
       const taskType = taskTypes[(day - 1) % taskTypes.length];
+
+      // Determine status
+      let status: Task['status'] = 'locked';
+      if (isPastDeadline && isAvailable) {
+        status = 'locked'; // Past deadline
+      } else if (isAvailable) {
+        status = 'available';
+      } else {
+        status = 'locked';
+      }
 
       return {
         id: String(day),
         title: `${taskType.title} - Day ${day}`,
         description: taskType.description,
         points: 100 + day * 10,
-        deadline: `Day ${day}`,
-        status: (isAvailable ? 'available' : 'locked') as Task['status'],
-        // category: taskType.category,
+        deadline: isPastDeadline ? 'Deadline Reached' : `Day ${day}`,
+        status,
         day
-        // estimatedTime: taskType.estimatedTime
       };
     })
   ];
@@ -170,8 +230,10 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
   const completedTasks = submissions.length;
   const successRate = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
 
-  // Restore orientation completion from localStorage
+  // Restore orientation completion from localStorage and update task statuses
   useEffect(() => {
+    // Only run this effect after tasks have been loaded
+    if (tasks.length === 0) return;
     const orientationCompleted = localStorage.getItem('orientationCompleted');
     const orientationCompletedAt = localStorage.getItem('orientationCompletedAt');
 
@@ -186,7 +248,6 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
             taskTitle: 'Complete Orientation',
             submissionText: 'Orientation video watched and completed',
             submittedAt: orientationCompletedAt,
-            // completedAt: orientationCompletedAt,
             status: 'completed',
             points: 100
           };
@@ -194,7 +255,74 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
         }
         return prevSubmissions;
       });
+
+      // Update orientation task status
+      setTasks(prevTasks =>
+        prevTasks.map(task =>
+          task.day === 0 && task.title === 'Complete Orientation'
+            ? { ...task, status: 'completed' as Task['status'] }
+            : task
+        )
+      );
     }
+
+    // Update all task statuses based on current time and deadlines
+    setTasks(prevTasks =>
+      prevTasks.map(task => {
+        if (task.day === 0) return task; // Skip orientation task
+
+        const daysSinceRegistration = getDaysSinceRegistration();
+        const isPastDeadline = isTaskPastDeadline(task.day);
+
+        // Don't change completed tasks
+        if (task.status === 'completed') return task;
+
+        // Apply deadline constraints
+        let isAvailable = false;
+        if (task.day <= 2) {
+          // Day 1-2 tasks: Available from day 1, expire on day 3
+          isAvailable = daysSinceRegistration >= 1 && !isPastDeadline;
+        } else {
+          // Day 3+ tasks: Available on their respective day, expire 2 days later
+          isAvailable = daysSinceRegistration >= task.day && !isPastDeadline;
+        }
+
+        return {
+          ...task,
+          status: isAvailable ? 'available' : 'locked',
+          deadline: isPastDeadline ? 'Deadline Reached' : `Day ${task.day}`
+        };
+      })
+    );
+  }, [tasks.length]); // Run when tasks are loaded
+
+  // Periodic check to update task statuses (every minute)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTasks(prevTasks =>
+        prevTasks.map(task => {
+          if (task.day === 0 || task.status === 'completed') return task;
+
+          const daysSinceRegistration = getDaysSinceRegistration();
+          const isPastDeadline = isTaskPastDeadline(task.day);
+
+          let isAvailable = false;
+          if (task.day <= 2) {
+            isAvailable = daysSinceRegistration >= 1 && !isPastDeadline;
+          } else {
+            isAvailable = daysSinceRegistration >= task.day && !isPastDeadline;
+          }
+
+          return {
+            ...task,
+            status: isAvailable ? 'available' : 'locked',
+            deadline: isPastDeadline ? 'Deadline Reached' : `Day ${task.day}`
+          };
+        })
+      );
+    }, 60000); // Check every minute
+
+    return () => clearInterval(interval);
   }, []);
 
   // Data fetching
@@ -203,6 +331,9 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
       try {
         const token = localStorage.getItem('token');
         if (!token) {
+          console.log('No token found, using sample tasks');
+          setTasks(sampleTasks);
+          setSubmissions(sampleSubmissions);
           setLoading(false);
           return;
         }
@@ -225,54 +356,65 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
           const tasksData = await tasksResponse.json();
           const submissionsData = await submissionsResponse.json();
 
+          console.log(`✓ Successfully fetched ${tasksData.length} tasks from database`);
+          console.log('Tasks:', tasksData.map((t: any) => `${t.title} (Day ${t.day})`));
+
           // Create a map of completed task IDs for quick lookup
           const completedTaskIds = new Set(submissionsData.map((sub: any) => sub.task_id));
 
           // Sort tasks by day to ensure proper order
           const sortedTasks = tasksData.sort((a: any, b: any) => a.day - b.day);
 
-          // Calculate progressive unlocking based on completed days
-          const completedDays = new Set(
-            submissionsData
-              .filter((sub: any) => sub.is_completed === true)
-              .map((sub: any) => {
-                const task = tasksData.find((t: any) => t.id === sub.task_id);
-                return task ? task.day : -1;
-              })
-              .filter((day: number) => day >= 0)
-          );
+          // Get days since registration for deadline calculations
+          const daysSinceRegistration = getDaysSinceRegistration();
+          console.log(`Days since registration: ${daysSinceRegistration}`);
 
-          // Find the highest completed day
-          const highestCompletedDay = completedDays.size > 0 ? Math.max(...Array.from(completedDays) as number[]) : -1;
-
-          // Allow up to 2 tasks beyond the highest completed day to be available
-          const maxAvailableDay = highestCompletedDay + 2;
-
-          // Transform backend data to match frontend interface with progressive unlocking
+          // Transform backend data to match frontend interface with deadline constraints
           const transformedTasks = sortedTasks.map((task: any, index: number) => {
             let status: 'available' | 'completed' | 'locked' = 'locked';
 
-            // Determine task status
+            // Check if task is completed
             if (completedTaskIds.has(task.id)) {
               status = 'completed';
-            } else if (task.day <= maxAvailableDay) {
-              status = 'available';
             } else {
-              status = 'locked';
+              // Apply deadline constraints
+              const taskDay = task.day;
+              const isPastDeadline = isTaskPastDeadline(taskDay);
+
+              // Task availability logic based on registration date
+              let isAvailable = false;
+              if (taskDay <= 2) {
+                // Day 1-2 tasks: Available from day 1, expire on day 3
+                isAvailable = daysSinceRegistration >= 1 && !isPastDeadline;
+              } else {
+                // Day 3+ tasks: Available on their respective day, expire 2 days later
+                isAvailable = daysSinceRegistration >= taskDay && !isPastDeadline;
+              }
+
+              status = isAvailable ? 'available' : 'locked';
             }
 
-            return {
+            // Special handling for orientation task (Day 0)
+            if (task.day === 0 && localStorage.getItem('orientationCompleted') === 'true') {
+              status = 'completed';
+            }
+
+            const transformedTask = {
               id: task.id,
               title: task.title,
               description: task.description,
               points: task.points_reward,
-              deadline: `Day ${task.day}`,
-              // priority: task.priority || 'medium',
+              deadline: isTaskPastDeadline(task.day) && status !== 'completed' ? 'Deadline Reached' : `Day ${task.day}`,
               status,
-              // category: task.category || 'General',
               day: task.day
-              // estimatedTime: task.estimated_time || '2-3 hours'
             };
+
+            // Debug task status
+            if (task.day === 9) {
+              console.log(`Day 9 task "${task.title}" status: ${status} (daysSinceRegistration: ${daysSinceRegistration}, taskDay: ${task.day})`);
+            }
+
+            return transformedTask;
           });
 
           const transformedSubmissions = submissionsData.map((sub: any) => ({
@@ -293,11 +435,24 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
           setSubmissions(transformedSubmissions);
         } else {
           console.error('Failed to fetch data from backend');
+          console.error('Tasks response status:', tasksResponse.status);
+          console.error('Submissions response status:', submissionsResponse.status);
+
+          if (tasksResponse.status === 401 || submissionsResponse.status === 401) {
+            console.error('Authentication failed - token may be invalid or expired');
+            // Clear invalid token
+            localStorage.removeItem('token');
+            // Redirect to login or refresh page
+            window.location.reload();
+            return;
+          }
+
           setTasks(sampleTasks);
           setSubmissions(sampleSubmissions);
         }
       } catch (error) {
         console.error('Error fetching tasks:', error);
+        console.error('Using sample tasks due to error');
         setTasks(sampleTasks);
         setSubmissions(sampleSubmissions);
       } finally {
@@ -734,16 +889,19 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                             <div className="flex items-center space-x-4 text-sm">
                               <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                 task.status === 'completed' ? 'bg-green-800 text-green-200' :
-                                // task.priority === 'high' ? 'bg-red-900 text-red-300' :
-                                // task.priority === 'medium' ? 'bg-yellow-900 text-yellow-300' :
+                                task.deadline === 'Deadline Reached' ? 'bg-red-800 text-red-200' :
                                 'bg-blue-900 text-blue-300'
                               }`}>
-                                {task.status === 'completed' ? 'Completed' : `incompleted`}
+                                {task.status === 'completed' ? 'Completed' :
+                                 task.deadline === 'Deadline Reached' ? 'Deadline Reached' :
+                                 'Available'}
                               </span>
                               <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                task.status === 'completed' ? 'bg-green-800 text-green-200' : 'bg-blue-900 text-blue-300'
+                                task.deadline === 'Deadline Reached' ? 'bg-red-900 text-red-300' :
+                                task.status === 'completed' ? 'bg-green-800 text-green-200' :
+                                'bg-gray-800 text-gray-300'
                               }`}>
-                                {/* {task.category} */}
+                                {task.deadline}
                               </span>
                             </div>
                           </div>
@@ -802,12 +960,11 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                 {tasks.filter(task => task.status === 'locked').length > 0 && (
                   <div className="mt-8">
                     <h3 className="text-lg font-semibold text-white mb-4">
-                      🔒 Upcoming Tasks (Complete previous tasks to unlock)
+                      🔒 Upcoming Tasks & Expired Tasks
                     </h3>
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                       {tasks
                         .filter(task => task.status === 'locked')
-                        .slice(0, 4) // Show only next 4 locked tasks
                         .map((task) => (
                         <Card
                           key={task.id}
@@ -821,11 +978,15 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                                   <span className="text-gray-500">🔒</span>
                                 </div>
                                 <div className="flex items-center space-x-4 text-sm">
-                                  <span className="px-2 py-1 bg-gray-800 text-gray-400 rounded-full text-xs font-medium">
-                                    Locked
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                    task.deadline === 'Deadline Reached' ? 'bg-red-800 text-red-300' : 'bg-gray-800 text-gray-400'
+                                  }`}>
+                                    {task.deadline === 'Deadline Reached' ? 'Expired' : 'Locked'}
                                   </span>
-                                  <span className="px-2 py-1 bg-gray-800 text-gray-400 rounded-full text-xs font-medium">
-                                    {/* {task.category} */}
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                    task.deadline === 'Deadline Reached' ? 'bg-red-900 text-red-400' : 'bg-gray-800 text-gray-400'
+                                  }`}>
+                                    {task.deadline}
                                   </span>
                                 </div>
                               </div>
@@ -847,7 +1008,11 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                                 </div>
 
                               </div>
-                              <span className="text-gray-500 text-sm">Complete previous tasks to unlock</span>
+                              <span className={`text-sm ${
+                                task.deadline === 'Deadline Reached' ? 'text-red-400' : 'text-gray-500'
+                              }`}>
+                                {task.deadline === 'Deadline Reached' ? 'Deadline has passed' : 'Complete previous tasks to unlock'}
+                              </span>
                             </div>
                           </CardContent>
                         </Card>

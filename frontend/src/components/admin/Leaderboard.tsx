@@ -8,7 +8,6 @@ import {
   Eye,
   Ban,
   UserCheck,
-  Send,
   Download
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -27,7 +26,6 @@ interface Ambassador {
   people_referred: number;
   last_activity: string;
   status: 'active' | 'inactive' | 'suspended';
-  completion_rate: number;
   growth_trend: 'up' | 'down' | 'stable';
   weekly_change: number;
 }
@@ -36,7 +34,6 @@ interface LeaderboardStats {
   total_ambassadors: number;
   active_this_week: number;
   total_points_awarded: number;
-  avg_completion_rate: number;
 }
 
 const BACKEND_URL = 'http://127.0.0.1:5000';
@@ -57,8 +54,7 @@ const Leaderboard: React.FC = () => {
   const sampleStats: LeaderboardStats = {
     total_ambassadors: 145,
     active_this_week: 128,
-    total_points_awarded: 125600,
-    avg_completion_rate: 78.5
+    total_points_awarded: 125600
   };
 
   const sampleAmbassadors: Ambassador[] = [
@@ -74,7 +70,6 @@ const Leaderboard: React.FC = () => {
       people_referred: 12,
       last_activity: '2 hours ago',
       status: 'active',
-      completion_rate: 94,
       growth_trend: 'up',
       weekly_change: 15
     },
@@ -90,7 +85,6 @@ const Leaderboard: React.FC = () => {
       people_referred: 10,
       last_activity: '5 hours ago',
       status: 'active',
-      completion_rate: 88,
       growth_trend: 'up',
       weekly_change: 8
     },
@@ -106,7 +100,6 @@ const Leaderboard: React.FC = () => {
       people_referred: 8,
       last_activity: '1 day ago',
       status: 'active',
-      completion_rate: 85,
       growth_trend: 'stable',
       weekly_change: 2
     },
@@ -122,7 +115,6 @@ const Leaderboard: React.FC = () => {
       people_referred: 6,
       last_activity: '3 hours ago',
       status: 'active',
-      completion_rate: 82,
       growth_trend: 'down',
       weekly_change: -5
     },
@@ -138,7 +130,6 @@ const Leaderboard: React.FC = () => {
       people_referred: 7,
       last_activity: '1 hour ago',
       status: 'active',
-      completion_rate: 79,
       growth_trend: 'up',
       weekly_change: 12
     },
@@ -154,7 +145,6 @@ const Leaderboard: React.FC = () => {
       people_referred: 5,
       last_activity: '2 days ago',
       status: 'inactive',
-      completion_rate: 65,
       growth_trend: 'down',
       weekly_change: -10
     },
@@ -170,7 +160,6 @@ const Leaderboard: React.FC = () => {
       people_referred: 4,
       last_activity: '1 week ago',
       status: 'suspended',
-      completion_rate: 45,
       growth_trend: 'down',
       weekly_change: -20
     }
@@ -183,80 +172,139 @@ const Leaderboard: React.FC = () => {
         const token = localStorage.getItem('token');
 
         if (!token) {
-          console.error('No token found');
+          console.error('No authentication token found');
           setStats(sampleStats);
           setAmbassadors(sampleAmbassadors);
           // Extract group leaders from sample data
           const leaders = Array.from(new Set(sampleAmbassadors.map(amb => amb.group_leader_name)));
           setGroupLeaders(leaders);
+          setLoading(false);
           return;
         }
 
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
+
         // Fetch ambassadors data
-        const ambassadorsResponse = await fetch(`${BACKEND_URL}/api/admin/ambassadors`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const ambassadorsResponse = await fetch(`${BACKEND_URL}/api/admin/ambassadors`, { headers });
 
-        // Fetch group leaders
-        const groupLeadersResponse = await fetch(`${BACKEND_URL}/api/admin/group-leaders`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        if (!ambassadorsResponse.ok) {
+          throw new Error(`Ambassadors API failed: ${ambassadorsResponse.status}`);
+        }
 
-        if (ambassadorsResponse.ok && groupLeadersResponse.ok) {
-          const ambassadorsData = await ambassadorsResponse.json();
-          const groupLeadersData = await groupLeadersResponse.json();
+        const ambassadorsData = await ambassadorsResponse.json();
+        console.log('Fetched ambassadors for leaderboard:', ambassadorsData);
 
-          // Transform ambassador data to match our interface
-          const transformedAmbassadors: Ambassador[] = ambassadorsData.map((amb: any, index: number) => ({
-            id: amb.id,
+        // Fetch submissions to calculate more accurate stats
+        const submissionsResponse = await fetch(`${BACKEND_URL}/api/admin/submissions`, { headers });
+        let submissionsData: any[] = [];
+
+        if (submissionsResponse.ok) {
+          submissionsData = await submissionsResponse.json();
+          console.log('Fetched submissions for leaderboard stats:', submissionsData);
+        }
+
+        // Transform ambassador data to match our interface
+        const transformedAmbassadors: Ambassador[] = ambassadorsData.map((amb: any) => {
+          // Calculate tasks completed from submissions
+          const userSubmissions = submissionsData.filter((sub: any) => sub.user_id === amb.id || sub.user_id === amb.user_id);
+          const tasksCompleted = userSubmissions.length;
+
+          // Calculate completion rate based on campaign days
+          const campaignDays = amb.campaign_days || amb.current_day || 0;
+          const completionRate = campaignDays > 0 ? Math.min(100, (tasksCompleted / campaignDays) * 100) : 0;
+
+          // Determine growth trend based on points
+          let growthTrend: 'up' | 'down' | 'stable' = 'stable';
+          if (amb.total_points > 1000) growthTrend = 'up';
+          else if (amb.total_points < 500) growthTrend = 'down';
+
+          return {
+            id: amb.id || amb.user_id,
             name: amb.name,
             email: amb.email,
             college: amb.college,
             group_leader_name: amb.group_leader_name || 'No Group Leader',
-            rank: amb.rank_position || index + 1,
+            rank: 0, // Will be set after sorting
             points: amb.total_points || 0,
-            tasks_completed: amb.campaign_days || 0,
+            tasks_completed: tasksCompleted,
             people_referred: amb.total_referrals || 0,
             last_activity: amb.last_activity || amb.join_date || 'Unknown',
-            status: amb.status === 'active' ? 'active' : 'inactive',
-            completion_rate: Math.min(100, Math.max(0, (amb.total_points || 0) / Math.max(1, amb.campaign_days || 1) * 2)),
-            growth_trend: amb.total_points > 100 ? 'up' : amb.total_points > 50 ? 'stable' : 'down',
-            weekly_change: Math.floor(Math.random() * 20) - 10 // Mock data for weekly change
-          }));
-
-          // Sort by points (descending) and assign ranks
-          transformedAmbassadors.sort((a, b) => b.points - a.points);
-          transformedAmbassadors.forEach((amb, index) => {
-            amb.rank = index + 1;
-          });
-
-          setAmbassadors(transformedAmbassadors);
-          setGroupLeaders(groupLeadersData);
-
-          // Calculate stats
-          const activeAmbassadors = transformedAmbassadors.filter(amb => amb.status === 'active');
-          const calculatedStats: LeaderboardStats = {
-            total_ambassadors: transformedAmbassadors.length,
-            active_this_week: activeAmbassadors.length,
-            total_points_awarded: transformedAmbassadors.reduce((sum, amb) => sum + amb.points, 0),
-            avg_completion_rate: transformedAmbassadors.reduce((sum, amb) => sum + amb.completion_rate, 0) / Math.max(1, transformedAmbassadors.length)
+            status: (amb.status === 'active' || !amb.status) ? 'active' : (amb.status === 'suspended' ? 'suspended' : 'inactive'),
+            growth_trend: growthTrend,
+            weekly_change: Math.floor(Math.random() * 30) - 15 // Mock data for weekly change - would need historical data
           };
+        });
 
-          setStats(calculatedStats);
-        } else {
-          console.error('Failed to fetch data');
-          setStats(sampleStats);
-          setAmbassadors(sampleAmbassadors);
-          // Extract group leaders from sample data
-          const leaders = Array.from(new Set(sampleAmbassadors.map(amb => amb.group_leader_name)));
-          setGroupLeaders(leaders);
+        // Sort by points (descending) and assign ranks
+        transformedAmbassadors.sort((a, b) => b.points - a.points);
+        transformedAmbassadors.forEach((amb, index) => {
+          amb.rank = index + 1;
+        });
+
+        setAmbassadors(transformedAmbassadors);
+
+        // Extract unique group leaders
+        const leaders = Array.from(new Set(transformedAmbassadors.map(amb => amb.group_leader_name).filter(Boolean)));
+        setGroupLeaders(leaders);
+
+        // Calculate real stats
+        const activeAmbassadors = transformedAmbassadors.filter(amb => amb.status === 'active');
+
+        // Calculate active this week (ambassadors with submissions in the last 7 days)
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+
+        // Get unique user IDs who have submitted in the last week
+        const activeUserIds = new Set();
+        submissionsData.forEach((submission: any) => {
+          // Try multiple date fields and formats
+          const dateFields = [submission.submitted_at, submission.created_at, submission.submission_date];
+          for (const dateField of dateFields) {
+            if (dateField) {
+              try {
+                const submissionDate = new Date(dateField);
+                if (!isNaN(submissionDate.getTime()) && submissionDate >= weekAgo) {
+                  activeUserIds.add(submission.user_id);
+                  break; // Found a valid recent date, no need to check other fields
+                }
+              } catch (error) {
+                // Continue to next date field if this one fails to parse
+                continue;
+              }
+            }
+          }
+        });
+
+        // Count ambassadors who have been active this week
+        let activeThisWeek = transformedAmbassadors.filter(amb =>
+          activeUserIds.has(amb.id) || activeUserIds.has(amb.id.toString())
+        );
+
+        // Fallback: if no recent submissions found, count active ambassadors
+        if (activeThisWeek.length === 0 && submissionsData.length === 0) {
+          activeThisWeek = transformedAmbassadors.filter(amb => amb.status === 'active');
         }
+
+        const calculatedStats: LeaderboardStats = {
+          total_ambassadors: transformedAmbassadors.length,
+          active_this_week: activeThisWeek.length,
+          total_points_awarded: transformedAmbassadors.reduce((sum, amb) => sum + amb.points, 0)
+        };
+
+        setStats(calculatedStats);
+        console.log('Leaderboard data updated successfully');
+        console.log('Active this week count:', activeThisWeek.length);
+        console.log('Active user IDs:', Array.from(activeUserIds));
+        console.log('Recent submissions:', submissionsData.filter((sub: any) => {
+          if (sub.submitted_at) {
+            const submissionDate = new Date(sub.submitted_at);
+            return submissionDate >= weekAgo;
+          }
+          return false;
+        }));
       } catch (error) {
         console.error('Error fetching leaderboard:', error);
         setStats(sampleStats);
@@ -454,43 +502,7 @@ const Leaderboard: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card className="bg-gray-800 border-gray-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <p className="text-gray-400 text-sm font-medium">Avg Completion Rate</p>
-                  <p className="text-2xl font-bold text-white mt-1">{stats?.avg_completion_rate?.toFixed(1)}%</p>
-                  <p className="text-purple-400 text-xs mt-1">Network performance</p>
 
-                  {/* Progress Bar */}
-                  <div className="mt-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-gray-400">Performance Level</span>
-                      <span className="text-xs text-gray-300">
-                        {stats?.avg_completion_rate && stats.avg_completion_rate >= 80 ? 'Excellent' :
-                         stats?.avg_completion_rate && stats.avg_completion_rate >= 60 ? 'Good' :
-                         stats?.avg_completion_rate && stats.avg_completion_rate >= 40 ? 'Average' : 'Needs Improvement'}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-700 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full transition-all duration-500 ${
-                          stats?.avg_completion_rate && stats.avg_completion_rate >= 80 ? 'bg-gradient-to-r from-green-500 to-emerald-400' :
-                          stats?.avg_completion_rate && stats.avg_completion_rate >= 60 ? 'bg-gradient-to-r from-blue-500 to-cyan-400' :
-                          stats?.avg_completion_rate && stats.avg_completion_rate >= 40 ? 'bg-gradient-to-r from-yellow-500 to-orange-400' :
-                          'bg-gradient-to-r from-red-500 to-pink-400'
-                        }`}
-                        style={{ width: `${Math.min(100, stats?.avg_completion_rate || 0)}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                </div>
-                <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center ml-4">
-                  <Trophy className="h-6 w-6 text-white" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Filters */}
@@ -560,7 +572,6 @@ const Leaderboard: React.FC = () => {
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Ambassador</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Group Leader</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Status</th>
-                    <th className="text-left py-3 px-4 text-gray-300 font-medium">Trend</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Actions</th>
                   </tr>
                 </thead>
@@ -600,17 +611,6 @@ const Leaderboard: React.FC = () => {
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(ambassador.status)}`}>
                           {ambassador.status}
                         </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center space-x-2">
-                          {getTrendIcon(ambassador.growth_trend, ambassador.weekly_change)}
-                          <span className={`text-sm ${
-                            ambassador.weekly_change > 0 ? 'text-green-400' : 
-                            ambassador.weekly_change < 0 ? 'text-red-400' : 'text-gray-400'
-                          }`}>
-                            {ambassador.weekly_change > 0 ? '+' : ''}{ambassador.weekly_change}%
-                          </span>
-                        </div>
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center space-x-2">
@@ -690,10 +690,7 @@ const Leaderboard: React.FC = () => {
                           {selectedAmbassador.status}
                         </span>
                       </div>
-                      <div>
-                        <p className="text-gray-400 text-sm">Last Activity</p>
-                        <p className="text-white">{selectedAmbassador.last_activity}</p>
-                      </div>
+
                     </div>
                   </div>
                   
@@ -708,34 +705,7 @@ const Leaderboard: React.FC = () => {
                         <p className="text-gray-400 text-sm">Tasks Completed</p>
                         <p className="text-white text-xl font-bold">{selectedAmbassador.tasks_completed}</p>
                       </div>
-                      <div>
-                        <p className="text-gray-400 text-sm">People Referred</p>
-                        <p className="text-white text-xl font-bold">{selectedAmbassador.people_referred}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-400 text-sm">Completion Rate</p>
-                        <div className="flex items-center space-x-3">
-                          <div className="flex-1 bg-gray-600 rounded-full h-3">
-                            <div 
-                              className="bg-blue-500 h-3 rounded-full"
-                              style={{ width: `${selectedAmbassador.completion_rate}%` }}
-                            ></div>
-                          </div>
-                          <span className="text-white font-medium">{selectedAmbassador.completion_rate}%</span>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-gray-400 text-sm">Weekly Change</p>
-                        <div className="flex items-center space-x-2">
-                          {getTrendIcon(selectedAmbassador.growth_trend, selectedAmbassador.weekly_change)}
-                          <span className={`font-medium ${
-                            selectedAmbassador.weekly_change > 0 ? 'text-green-400' : 
-                            selectedAmbassador.weekly_change < 0 ? 'text-red-400' : 'text-gray-400'
-                          }`}>
-                            {selectedAmbassador.weekly_change > 0 ? '+' : ''}{selectedAmbassador.weekly_change}%
-                          </span>
-                        </div>
-                      </div>
+
                     </div>
                   </div>
                 </div>
@@ -748,10 +718,7 @@ const Leaderboard: React.FC = () => {
                   >
                     Close
                   </Button>
-                  <Button className="bg-blue-600 hover:bg-blue-700">
-                    <Send className="h-4 w-4 mr-2" />
-                    Send Message
-                  </Button>
+
                   {selectedAmbassador.status === 'active' ? (
                     <Button className="bg-red-600 hover:bg-red-700">
                       <Ban className="h-4 w-4 mr-2" />

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Trophy, Medal, Award, Crown, TrendingUp, Users, Star, Target, Eye, CheckCircle, Clock } from 'lucide-react';
+import { Trophy, Medal, Award, Crown, TrendingUp, Users, Star, Target, Eye, CheckCircle, Clock, GraduationCap, UserCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTaskData } from '../../hooks/useTaskData';
 
@@ -11,9 +11,9 @@ interface LeaderboardEntry {
   rank: number;
   name: string;
   college: string;
+  group_leader_name: string;
   points: number;
   tasks_completed: number;
-  // people_referred: number;
   avatar: string;
   trend: 'up' | 'down' | 'stable';
   last_activity: string;
@@ -40,9 +40,9 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
       rank: 1,
       name: 'Sarah Johnson',
       college: 'MIT',
+      group_leader_name: 'Dr. Smith',
       points: 2850,
       tasks_completed: 24,
-      // people_referred: 12,
       avatar: 'SJ',
       trend: 'up',
       last_activity: '2 hours ago'
@@ -52,9 +52,9 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
       rank: 2,
       name: 'Michael Chen',
       college: 'Stanford',
+      group_leader_name: 'Prof. Johnson',
       points: 2720,
       tasks_completed: 22,
-      // people_referred: 10,
       avatar: 'MC',
       trend: 'up',
       last_activity: '1 hour ago'
@@ -64,9 +64,9 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
       rank: 3,
       name: 'Emily Rodriguez',
       college: 'Harvard',
+      group_leader_name: 'Dr. Williams',
       points: 2580,
       tasks_completed: 20,
-      // people_referred: 8,      
       avatar: 'ER',
       trend: 'stable',
       last_activity: '3 hours ago'
@@ -76,9 +76,9 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
       rank: 4,
       name: 'David Kim',
       college: 'UC Berkeley',
+      group_leader_name: 'Prof. Davis',
       points: 2450,
       tasks_completed: 19,
-      // people_referred: 7,
       avatar: 'DK',
       trend: 'down',
       last_activity: '5 hours ago'
@@ -88,9 +88,9 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
       rank: 5,
       name: 'Lisa Wang',
       college: 'Yale',
+      group_leader_name: 'Dr. Brown',
       points: 2320,
       tasks_completed: 18,
-      // people_referred: 6,
       avatar: 'LW',
       trend: 'up',
       last_activity: '1 day ago'
@@ -100,9 +100,9 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
       rank: 6,
       name: 'James Wilson',
       college: 'Princeton',
+      group_leader_name: 'Prof. Miller',
       points: 2180,
       tasks_completed: 17,
-      // people_referred: 5,
       avatar: 'JW',
       trend: 'stable',
       last_activity: '2 days ago'
@@ -112,9 +112,9 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
       rank: 7,
       name: 'Maria Garcia',
       college: 'Columbia',
+      group_leader_name: 'Dr. Wilson',
       points: 2050,
       tasks_completed: 16,
-      // people_referred: 4,
       avatar: 'MG',
       trend: 'up',
       last_activity: '1 day ago'
@@ -124,9 +124,9 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
       rank: 8,
       name: 'Alex Thompson',
       college: 'Duke',
+      group_leader_name: 'Prof. Taylor',
       points: 1920,
       tasks_completed: 15,
-      // people_referred: 3,
       avatar: 'AT',
       trend: 'down',
       last_activity: '3 days ago'
@@ -180,13 +180,13 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
 
           // Transform backend data to match frontend interface
           const transformedData = data.map((entry: any, index: number) => ({
-            id: (index + 1).toString(),
-            rank: entry.rank,
+            id: entry.id,
+            rank: index + 1, // Use index-based ranking for correct display order
             name: entry.name,
             college: entry.college,
+            group_leader_name: entry.group_leader_name,
             points: entry.total_points,
-            tasks_completed: Math.floor(entry.total_points / 100), // Estimate based on points
-            // people_referred: entry.total_referrals,
+            tasks_completed: entry.tasks_completed,
             avatar: entry.name.split(' ').map((n: string) => n[0]).join('').toUpperCase(),
             trend: 'stable', // Default trend - could be enhanced with historical data
             last_activity: 'Recently active'
@@ -416,7 +416,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
                   </div>
                   <p className="text-2xl font-bold text-white">{stats.completedTasks}</p>
                   <p className="text-gray-400 text-sm">Tasks Completed</p>
-                  <p className="text-green-400 text-xs mt-1">{stats.completionRate.toFixed(1)}% completion rate</p>
+                  <p className="text-green-400 text-xs mt-1">Total completed</p>
                 </div>
 
                 <div className="text-center">
@@ -475,36 +475,134 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
           <CardHeader>
             <CardTitle className="text-white">Top Performers</CardTitle>
             <CardDescription className="text-gray-400">
-              All-time top performers
+              All-time top performers with detailed information
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {leaderboardData.slice(0, 5).map((entry) => (
-                <div 
+            {/* Desktop Table View */}
+            <div className="hidden lg:block">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-700">
+                      <th className="text-left py-3 px-2 text-gray-400 font-medium">
+                        <div className="flex items-center space-x-1">
+                          <Trophy className="h-4 w-4" />
+                          <span>Rank</span>
+                        </div>
+                      </th>
+                      <th className="text-left py-3 px-2 text-gray-400 font-medium">
+                        <div className="flex items-center space-x-1">
+                          <Users className="h-4 w-4" />
+                          <span>Ambassador</span>
+                        </div>
+                      </th>
+                      <th className="text-left py-3 px-2 text-gray-400 font-medium">
+                        <div className="flex items-center space-x-1">
+                          <GraduationCap className="h-4 w-4" />
+                          <span>College</span>
+                        </div>
+                      </th>
+                      <th className="text-left py-3 px-2 text-gray-400 font-medium">
+                        <div className="flex items-center space-x-1">
+                          <UserCheck className="h-4 w-4" />
+                          <span>Group Leader</span>
+                        </div>
+                      </th>
+                      <th className="text-center py-3 px-2 text-gray-400 font-medium">
+                        <div className="flex items-center justify-center space-x-1">
+                          <CheckCircle className="h-4 w-4" />
+                          <span>Tasks Completed</span>
+                        </div>
+                      </th>
+                      <th className="text-center py-3 px-2 text-gray-400 font-medium">
+                        <div className="flex items-center justify-center space-x-1">
+                          <Star className="h-4 w-4" />
+                          <span>Points</span>
+                        </div>
+                      </th>
+                      <th className="text-center py-3 px-2 text-gray-400 font-medium">
+                        <div className="flex items-center justify-center space-x-1">
+                          <Eye className="h-4 w-4" />
+                          <span>Action</span>
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leaderboardData.slice(0, 10).map((entry, index) => (
+                      <tr key={entry.id} className="border-b border-gray-700/50 hover:bg-gray-700/30 transition-colors">
+                        <td className="py-4 px-2">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${getRankBadge(index + 1)}`}>
+                            {(index + 1) <= 3 ? getRankIcon(index + 1) : <span className="text-sm font-bold">#{index + 1}</span>}
+                          </div>
+                        </td>
+                        <td className="py-4 px-2">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+                              <span className="text-white font-bold text-sm">{entry.avatar}</span>
+                            </div>
+                            <div>
+                              <h4 className="font-medium text-white">{entry.name}</h4>
+                              <p className="text-gray-400 text-xs">{entry.last_activity}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-4 px-2">
+                          <span className="text-gray-300 text-sm">{entry.college}</span>
+                        </td>
+                        <td className="py-4 px-2">
+                          <span className="text-gray-300 text-sm">{entry.group_leader_name || 'Not specified'}</span>
+                        </td>
+                        <td className="py-4 px-2 text-center">
+                          <div className="flex flex-col items-center">
+                            <span className="text-green-400 font-bold text-lg">{entry.tasks_completed}</span>
+                            <span className="text-gray-400 text-xs">tasks</span>
+                          </div>
+                        </td>
+                        <td className="py-4 px-2 text-center">
+                          <div className="flex flex-col items-center">
+                            <span className="text-yellow-400 font-bold text-lg">{entry.points}</span>
+                            <span className="text-gray-400 text-xs">points</span>
+                          </div>
+                        </td>
+                        <td className="py-4 px-2 text-center">
+                          <Button
+                            onClick={() => handleViewProfile(entry)}
+                            variant="ghost"
+                            size="sm"
+                            className="text-blue-400 hover:text-blue-300 hover:bg-blue-400/10"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="lg:hidden space-y-4">
+              {leaderboardData.slice(0, 10).map((entry, index) => (
+                <div
                   key={entry.id}
-                  className="flex items-center justify-between p-4 bg-gray-700 rounded-lg hover:bg-gray-650 transition-colors"
+                  className="p-4 bg-gray-700 rounded-lg hover:bg-gray-650 transition-colors"
                 >
-                  {/* Left content: keep name and college */}
-                  <div className="flex items-center space-x-4">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getRankBadge(entry.rank)}`}>
-                      {getRankIcon(entry.rank)}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getRankBadge(index + 1)}`}>
+                        {(index + 1) <= 3 ? getRankIcon(index + 1) : <span className="text-sm font-bold">#{index + 1}</span>}
+                      </div>
+                      <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+                        <span className="text-white font-bold text-sm">{entry.avatar}</span>
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-white">{entry.name}</h4>
+                        <p className="text-gray-400 text-sm">{entry.college}</p>
+                      </div>
                     </div>
-                    <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                      <span className="text-white font-bold text-sm">{entry.avatar}</span>
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-white">{entry.name}</h4>
-                      <p className="text-gray-400 text-sm">{entry.college}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-6">
-                    <div className="text-right">
-                      <p className="text-2xl font-bold text-white">{entry.points}</p>
-                      <p className="text-gray-400 text-sm">points</p>
-                    </div>
-
                     <Button
                       onClick={() => handleViewProfile(entry)}
                       variant="ghost"
@@ -513,6 +611,21 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 text-sm">
+                    <div className="bg-gray-800 rounded p-2">
+                      <p className="text-gray-400 text-xs">Group Leader</p>
+                      <p className="text-white font-medium text-xs">{entry.group_leader_name || 'Not specified'}</p>
+                    </div>
+                    <div className="bg-gray-800 rounded p-2">
+                      <p className="text-gray-400 text-xs">Tasks Completed</p>
+                      <p className="text-green-400 font-bold text-lg">{entry.tasks_completed}</p>
+                    </div>
+                    <div className="bg-gray-800 rounded p-2">
+                      <p className="text-gray-400 text-xs">Points</p>
+                      <p className="text-yellow-400 font-bold text-lg">{entry.points}</p>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -551,22 +664,15 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
                 </div>
                 <div className="bg-gray-800 rounded-lg p-3">
                   <p className="text-gray-400">Points</p>
-                  <p className="text-white font-medium">{modalEntry?.points}</p>
+                  <p className="text-yellow-400 font-bold">{modalEntry?.points}</p>
                 </div>
                 <div className="bg-gray-800 rounded-lg p-3">
                   <p className="text-gray-400">Tasks Completed</p>
-                  <p className="text-white font-medium">{modalEntry?.tasks_completed}</p>
+                  <p className="text-green-400 font-bold text-lg">{modalEntry?.tasks_completed}</p>
                 </div>
-                {/* <div className="bg-gray-800 rounded-lg p-3">
-                  // {/* <p className="text-gray-400">People Referred</p> */}
-                   {/* <p className="text-white font-medium">{modalEntry?.people_referred}</p> */}
-                {/* </div> */} 
                 <div className="bg-gray-800 rounded-lg p-3">
-                  <p className="text-gray-400">Trend</p>
-                  <div className="flex items-center space-x-2">
-                    {modalEntry && getTrendIcon(modalEntry.trend)}
-                    <span className="text-gray-300 capitalize">{modalEntry?.trend}</span>
-                  </div>
+                  <p className="text-gray-400">Group Leader</p>
+                  <p className="text-white font-medium">{modalEntry?.group_leader_name || 'Not specified'}</p>
                 </div>
                 <div className="bg-gray-800 rounded-lg p-3">
                   <p className="text-gray-400">Last Activity</p>

@@ -13,7 +13,6 @@ import {
   Activity,
   BarChart3,
   FileText,
-  Send,
   Ban,
   UserX
 } from 'lucide-react';
@@ -31,7 +30,6 @@ interface AdminDashboardStats {
   total_points_distributed: number;
   pending_approvals: number;
   system_health: number;
-  avg_completion_rate: number;
 }
 
 interface Ambassador {
@@ -45,7 +43,6 @@ interface Ambassador {
   total_points: number;
   rank: number;
   last_active: string;
-  completion_rate: number;
 }
 
 interface TaskAssignment {
@@ -77,8 +74,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
     tasks_submitted_this_week: 456,
     total_points_distributed: 125600,
     pending_approvals: 23,
-    system_health: 96,
-    avg_completion_rate: 78.5
+    system_health: 96
   };
 
   const sampleAmbassadors: Ambassador[] = [
@@ -92,8 +88,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
       tasks_completed: 45,
       total_points: 2250,
       rank: 1,
-      last_active: '2 hours ago',
-      completion_rate: 94
+      last_active: '2 hours ago'
     },
     {
       id: 'amb_002',
@@ -105,8 +100,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
       tasks_completed: 42,
       total_points: 2100,
       rank: 2,
-      last_active: '5 hours ago',
-      completion_rate: 88
+      last_active: '5 hours ago'
     },
     {
       id: 'amb_003',
@@ -118,8 +112,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
       tasks_completed: 15,
       total_points: 750,
       rank: 45,
-      last_active: '2 days ago',
-      completion_rate: 45
+      last_active: '2 days ago'
     },
     {
       id: 'amb_004',
@@ -131,8 +124,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
       tasks_completed: 38,
       total_points: 1900,
       rank: 3,
-      last_active: '1 hour ago',
-      completion_rate: 85
+      last_active: '1 hour ago'
     },
     {
       id: 'amb_005',
@@ -144,8 +136,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
       tasks_completed: 8,
       total_points: 400,
       rank: 78,
-      last_active: '1 week ago',
-      completion_rate: 25
+      last_active: '1 week ago'
     }
   ];
 
@@ -184,70 +175,96 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
       try {
         const token = localStorage.getItem('token');
         if (!token) {
+          console.error('No authentication token found');
+          setDashboardStats(sampleStats);
+          setAmbassadors(sampleAmbassadors);
+          setRecentTasks(sampleTasks);
           setLoading(false);
           return;
         }
 
-        // Fetch admin stats
-        const statsResponse = await fetch(`${BACKEND_URL}/api/admin/stats`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        };
 
-        // Fetch ambassadors
-        const ambassadorsResponse = await fetch(`${BACKEND_URL}/api/admin/ambassadors`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
+        // Fetch ambassadors data first
+        const ambassadorsResponse = await fetch(`${BACKEND_URL}/api/admin/ambassadors`, { headers });
 
-        if (statsResponse.ok && ambassadorsResponse.ok) {
-          const statsData = await statsResponse.json();
-          const ambassadorsData = await ambassadorsResponse.json();
-
-          // Transform stats data
-          const transformedStats: AdminDashboardStats = {
-            total_ambassadors: statsData.total_ambassadors,
-            active_ambassadors: statsData.active_ambassadors,
-            total_tasks_assigned: ambassadorsData.length * 10, // Estimate
-            tasks_completed_today: Math.floor(statsData.total_ambassadors * 0.3), // Estimate
-            total_tasks_submitted: ambassadorsData.reduce((sum: number, amb: any) => sum + (amb.campaign_days || 0), 0),
-            tasks_submitted_this_week: Math.floor(ambassadorsData.reduce((sum: number, amb: any) => sum + (amb.campaign_days || 0), 0) * 0.25), // Estimate 25% of total tasks in last week
-            total_points_distributed: ambassadorsData.reduce((sum: number, amb: any) => sum + amb.total_points, 0),
-            pending_approvals: Math.floor(statsData.active_ambassadors * 0.1), // Estimate
-            system_health: 98, // Static for now
-            avg_completion_rate: statsData.average_engagement_rate || 78.5
-          };
-
-          // Transform ambassadors data
-          const transformedAmbassadors = ambassadorsData.slice(0, 5).map((amb: any, index: number) => ({
-            id: amb.id,
-            name: amb.name,
-            email: amb.email,
-            college: amb.college,
-            group_leader_name: amb.group_leader_name || 'No Group Leader',
-            status: amb.status || 'active',
-            tasks_completed: Math.floor(amb.total_points / 100),
-            total_points: amb.total_points,
-            rank: index + 1,
-            last_active: amb.last_activity || 'Recently active',
-            completion_rate: Math.min(100, Math.max(0, (amb.total_points || 0) / Math.max(1, Math.floor(amb.total_points / 100) || 1) * 2))
-          }));
-
-          setDashboardStats(transformedStats);
-          setAmbassadors(transformedAmbassadors);
-          setRecentTasks(sampleTasks); // Keep sample tasks for now
-        } else {
-          console.error('Failed to fetch admin data');
-          setDashboardStats(sampleStats);
-          setAmbassadors(sampleAmbassadors);
-          setRecentTasks(sampleTasks);
+        if (!ambassadorsResponse.ok) {
+          throw new Error(`Ambassadors API failed: ${ambassadorsResponse.status}`);
         }
+
+        const ambassadorsData = await ambassadorsResponse.json();
+        console.log('Fetched ambassadors data:', ambassadorsData);
+
+        // Fetch submissions data for more accurate stats
+        const submissionsResponse = await fetch(`${BACKEND_URL}/api/admin/submissions`, { headers });
+        let submissionsData = [];
+
+        if (submissionsResponse.ok) {
+          submissionsData = await submissionsResponse.json();
+          console.log('Fetched submissions data:', submissionsData);
+        }
+
+        // Calculate real stats from the data
+        const activeAmbassadors = ambassadorsData.filter((amb: any) => amb.status === 'active' || !amb.status);
+        const totalPoints = ambassadorsData.reduce((sum: number, amb: any) => sum + (amb.total_points || 0), 0);
+        const totalSubmissions = submissionsData.length;
+
+        // Calculate today's submissions (last 24 hours)
+        const today = new Date();
+        const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+        const todaySubmissions = submissionsData.filter((sub: any) => {
+          const subDate = new Date(sub.submission_date || sub.created_at);
+          return subDate >= yesterday;
+        });
+
+        // Calculate this week's submissions
+        const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const weekSubmissions = submissionsData.filter((sub: any) => {
+          const subDate = new Date(sub.submission_date || sub.created_at);
+          return subDate >= weekAgo;
+        });
+
+        const transformedStats: AdminDashboardStats = {
+          total_ambassadors: ambassadorsData.length,
+          active_ambassadors: activeAmbassadors.length,
+          total_tasks_assigned: ambassadorsData.length * 30, // Assuming 30 days campaign
+          tasks_completed_today: todaySubmissions.length,
+          total_tasks_submitted: totalSubmissions,
+          tasks_submitted_this_week: weekSubmissions.length,
+          total_points_distributed: totalPoints,
+          pending_approvals: submissionsData.filter((sub: any) => sub.status_text === 'pending' || sub.status_text === 'submitted').length,
+          system_health: 98 // Static for now
+        };
+
+        // Transform ambassadors data - get top 5 by points
+        const sortedAmbassadors = ambassadorsData
+          .sort((a: any, b: any) => (b.total_points || 0) - (a.total_points || 0))
+          .slice(0, 5);
+
+        const transformedAmbassadors = sortedAmbassadors.map((amb: any, index: number) => ({
+          id: amb.id || amb.user_id,
+          name: amb.name,
+          email: amb.email,
+          college: amb.college,
+          group_leader_name: amb.group_leader_name || 'No Group Leader',
+          status: amb.status === 'active' ? 'active' : (amb.status === 'inactive' ? 'inactive' : 'active'),
+          tasks_completed: amb.tasks_completed || 0, // Use real tasks_completed from API
+          total_points: amb.total_points || 0,
+          rank: index + 1,
+          last_active: amb.last_login || amb.registration_date || 'Recently'
+        }));
+
+        setDashboardStats(transformedStats);
+        setAmbassadors(transformedAmbassadors);
+        setRecentTasks(sampleTasks); // Keep sample tasks for now - would need task assignments API
+
+        console.log('Dashboard data updated successfully');
       } catch (error) {
         console.error('Error fetching admin dashboard data:', error);
+        // Fallback to sample data on error
         setDashboardStats(sampleStats);
         setAmbassadors(sampleAmbassadors);
         setRecentTasks(sampleTasks);
@@ -455,20 +472,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
             </CardContent>
           </Card>
 
-          {/* <Card className="bg-gray-800 border-gray-700 hover:bg-gray-750 transition-colors">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-400 text-xs font-medium">Completion Rate</p>
-                  <p className="text-xl font-bold text-white mt-1">{dashboardStats?.avg_completion_rate || 0}%</p>
-                  <p className="text-green-400 text-xs mt-1">Network average</p>
-                </div>
-                <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
-                  <BarChart3 className="h-5 w-5 text-white" />
-                </div>
-              </div>
-            </CardContent>
-          </Card> */}
+
         </div>
 
 
@@ -613,10 +617,6 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                         <p className="text-white">#{selectedAmbassador.rank}</p>
                       </div>
                       <div>
-                        <p className="text-gray-400 text-sm">Completion Rate</p>
-                        <p className="text-white">{selectedAmbassador.completion_rate}%</p>
-                      </div>
-                      <div>
                         <p className="text-gray-400 text-sm">Last Active</p>
                         <p className="text-white">{selectedAmbassador.last_active}</p>
                       </div>
@@ -630,10 +630,6 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                     className="border-gray-700 text-gray-300 hover:bg-gray-800"
                   >
                     Close
-                  </Button>
-                  <Button className="bg-blue-600 hover:bg-blue-700">
-                    <Send className="h-4 w-4 mr-2" />
-                    Send Message
                   </Button>
                   {selectedAmbassador.status === 'active' ? (
                     <Button className="bg-red-600 hover:bg-red-700">

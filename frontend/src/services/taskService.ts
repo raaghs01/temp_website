@@ -22,7 +22,6 @@ export interface TaskStats {
   completedTasks: number;
   totalPoints: number;
   totalPeopleConnected: number;
-  completionRate: number;
   averagePointsPerTask: number;
   categoryBreakdown: { [key: string]: number };
   monthlyProgress: { month: string; tasks: number; points: number }[];
@@ -201,7 +200,6 @@ class TaskService {
       const completedTasks = completions.length;
       const totalPoints = completions.reduce((sum, comp) => sum + comp.points, 0);
       const totalPeopleConnected = completions.reduce((sum, comp) => sum + comp.peopleConnected, 0);
-      const completionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
       const averagePointsPerTask = completedTasks > 0 ? totalPoints / completedTasks : 0;
 
       // Category breakdown
@@ -243,7 +241,6 @@ class TaskService {
         completedTasks,
         totalPoints,
         totalPeopleConnected,
-        completionRate,
         averagePointsPerTask,
         categoryBreakdown,
         monthlyProgress,
@@ -259,7 +256,6 @@ class TaskService {
         completedTasks: 0,
         totalPoints: 0,
         totalPeopleConnected: 0,
-        completionRate: 0,
         averagePointsPerTask: 0,
         categoryBreakdown: {},
         monthlyProgress: [],

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileText, Download, Users, Award, CheckCircle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { FileText, Download, Users, Award, CheckCircle, Filter, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useTaskData, useFilteredTaskData } from '../../hooks/useTaskData';
 
@@ -45,9 +46,111 @@ const Reports: React.FC = () => {
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [groupLeaders, setGroupLeaders] = useState<string[]>([]);
+  const [selectedGroupLeader, setSelectedGroupLeader] = useState<string>('all');
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [allSubmissions, setAllSubmissions] = useState<TaskSubmission[]>([]);
+  const [filteredSubmissions, setFilteredSubmissions] = useState<TaskSubmission[]>([]);
+
   // Use the new task data service
   const { stats, completions, loading: taskLoading } = useTaskData();
   const filteredData = useFilteredTaskData({});
+
+  // Fetch group leaders from backend
+  const fetchGroupLeaders = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        // Add sample group leaders as fallback
+        setGroupLeaders(['Nehal', 'Ansh', 'Priya', 'Rahul', 'Sneha']);
+        return;
+      }
+
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      // Try the new group-leaders endpoint first
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/group-leaders`, { headers });
+        if (response.ok) {
+          const data = await response.json();
+          setGroupLeaders(data.group_leaders || []);
+          return;
+        }
+      } catch (error) {
+        console.log('Group leaders endpoint not accessible, trying leaderboard...');
+      }
+
+      // Fallback to leaderboard endpoint
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/leaderboard?limit=100`, { headers });
+        if (response.ok) {
+          const ambassadors = await response.json();
+          const leaders = Array.from(new Set(ambassadors.map((amb: any) => amb.group_leader_name).filter(Boolean))) as string[];
+          setGroupLeaders(leaders);
+          return;
+        }
+      } catch (error) {
+        console.log('Leaderboard endpoint not accessible');
+      }
+
+      // Final fallback - add sample group leaders
+      setGroupLeaders(['Nehal', 'Ansh', 'Priya', 'Rahul', 'Sneha']);
+    } catch (error) {
+      console.error('Error fetching group leaders:', error);
+      // Add sample group leaders as fallback
+      setGroupLeaders(['Nehal', 'Ansh', 'Priya', 'Rahul', 'Sneha']);
+    }
+  };
+
+  // Fetch all submissions for filtering
+  const fetchAllSubmissions = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      // Build query parameters for admin submissions
+      const params = new URLSearchParams();
+      if (selectedGroupLeader !== 'all') {
+        params.append('group_leader', selectedGroupLeader);
+      }
+      if (dateRange.start) {
+        params.append('start_date', dateRange.start);
+      }
+      if (dateRange.end) {
+        params.append('end_date', dateRange.end);
+      }
+
+      const response = await fetch(`${BACKEND_URL}/api/admin/submissions?${params}`, { headers });
+      if (response.ok) {
+        const submissions = await response.json();
+        const formattedSubmissions = submissions.map((sub: any) => ({
+          id: sub.id,
+          taskId: sub.task_id,
+          taskTitle: sub.task_title || 'Task',
+          submissionText: sub.status_text,
+          submittedAt: sub.submission_date,
+          completedAt: sub.submission_date,
+          status: 'completed' as const,
+          points: sub.points_earned,
+          peopleConnected: sub.people_connected,
+          category: 'General',
+          priority: 'medium'
+        }));
+        setAllSubmissions(formattedSubmissions);
+        setFilteredSubmissions(formattedSubmissions);
+      }
+    } catch (error) {
+      console.error('Error fetching all submissions:', error);
+    }
+  };
 
   // Fetch report data from backend
   const fetchReportData = async () => {
@@ -212,7 +315,52 @@ const Reports: React.FC = () => {
 
   useEffect(() => {
     fetchReportData();
+    fetchGroupLeaders();
   }, []);
+
+  useEffect(() => {
+    // Fetch filtered submissions for admin users, or apply client-side filtering for regular users
+    if (userProfile?.role === 'admin') {
+      fetchAllSubmissions();
+    } else {
+      // For regular users, apply client-side filtering to their own submissions
+      if (reportData?.submissions) {
+        let filtered = reportData.submissions;
+
+        // Filter by date range if specified
+        if (dateRange.start || dateRange.end) {
+          filtered = filtered.filter(sub => {
+            const subDate = new Date(sub.submittedAt);
+            const startDate = dateRange.start ? new Date(dateRange.start) : null;
+            const endDate = dateRange.end ? new Date(dateRange.end) : null;
+
+            if (startDate && subDate < startDate) return false;
+            if (endDate && subDate > endDate) return false;
+            return true;
+          });
+        }
+
+        setFilteredSubmissions(filtered);
+      }
+    }
+  }, [selectedGroupLeader, dateRange, userProfile, reportData]);
+
+  // Filter change handlers
+  const handleGroupLeaderChange = (value: string) => {
+    setSelectedGroupLeader(value);
+  };
+
+  const handleDateRangeChange = (field: 'start' | 'end', value: string) => {
+    setDateRange(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const clearFilters = () => {
+    setSelectedGroupLeader('all');
+    setDateRange({ start: '', end: '' });
+  };
 
   // Update report data when task data changes
   useEffect(() => {
@@ -791,8 +939,12 @@ const Reports: React.FC = () => {
         {/* Welcome Section */}
         <div className="mb-8">
           <h2 className="text-3xl font-bold mb-2">Reports & Insights</h2>
-          <p className="text-gray-400">Generate detailed reports and insights about your ambassador activities and performance.</p>
+          <p className="text-gray-400">
+            Generate detailed reports and insights about your ambassador activities and performance.
+          </p>
         </div>
+
+
 
         {/* Stats Overview */}
         {loading ? (
@@ -815,8 +967,14 @@ const Reports: React.FC = () => {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-gray-400 text-sm font-medium">Total Tasks</p>
-                    <p className="text-2xl font-bold text-white mt-1">{reportData.totalTasks}</p>
+                    <p className="text-gray-400 text-sm font-medium">
+                      {(selectedGroupLeader !== 'all' || dateRange.start || dateRange.end) ? 'Filtered Tasks' : 'Total Tasks'}
+                    </p>
+                    <p className="text-2xl font-bold text-white mt-1">
+                      {(selectedGroupLeader !== 'all' || dateRange.start || dateRange.end) && filteredSubmissions.length > 0
+                        ? filteredSubmissions.length
+                        : reportData.totalTasks}
+                    </p>
                     <p className="text-blue-400 text-xs mt-1">Completed</p>
                   </div>
                   <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
@@ -830,8 +988,14 @@ const Reports: React.FC = () => {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-gray-400 text-sm font-medium">Total Points</p>
-                    <p className="text-2xl font-bold text-white mt-1">{reportData.totalPoints}</p>
+                    <p className="text-gray-400 text-sm font-medium">
+                      {(selectedGroupLeader !== 'all' || dateRange.start || dateRange.end) ? 'Filtered Points' : 'Total Points'}
+                    </p>
+                    <p className="text-2xl font-bold text-white mt-1">
+                      {(selectedGroupLeader !== 'all' || dateRange.start || dateRange.end) && filteredSubmissions.length > 0
+                        ? filteredSubmissions.reduce((sum, sub) => sum + sub.points, 0)
+                        : reportData.totalPoints}
+                    </p>
                     <p className="text-yellow-400 text-xs mt-1">Earned</p>
                   </div>
                   <div className="w-12 h-12 bg-yellow-600 rounded-lg flex items-center justify-center">
@@ -845,8 +1009,14 @@ const Reports: React.FC = () => {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-gray-400 text-sm font-medium">People Connected</p>
-                    <p className="text-2xl font-bold text-white mt-1">{reportData.totalPeopleConnected}</p>
+                    <p className="text-gray-400 text-sm font-medium">
+                      {(selectedGroupLeader !== 'all' || dateRange.start || dateRange.end) ? 'Filtered People' : 'People Connected'}
+                    </p>
+                    <p className="text-2xl font-bold text-white mt-1">
+                      {(selectedGroupLeader !== 'all' || dateRange.start || dateRange.end) && filteredSubmissions.length > 0
+                        ? filteredSubmissions.reduce((sum, sub) => sum + (sub.peopleConnected || 0), 0)
+                        : reportData.totalPeopleConnected}
+                    </p>
                     <p className="text-green-400 text-xs mt-1">Network growth</p>
                   </div>
                   <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center">
@@ -938,6 +1108,76 @@ const Reports: React.FC = () => {
                 {filteredData.completions.length === 0 && (
                   <div className="text-center py-8">
                     <p className="text-gray-400">No submissions found. Complete some tasks to see data here.</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Filtered Submissions Table - Show when filters are applied */}
+        {(selectedGroupLeader !== 'all' || dateRange.start || dateRange.end) && filteredSubmissions.length > 0 && (
+          <Card className="bg-gray-800 border-gray-700 mb-6">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center space-x-2">
+                <CheckCircle className="h-6 w-6 text-green-400" />
+                <span>All Submissions</span>
+              </CardTitle>
+              <CardDescription className="text-gray-400">
+                Detailed view of all task submissions
+                {selectedGroupLeader !== 'all' && ` from ${selectedGroupLeader}'s team`}
+                {(dateRange.start || dateRange.end) && ' within selected date range'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-700">
+                      <th className="text-left py-3 px-2 text-gray-400 font-medium">Ambassador</th>
+                      <th className="text-left py-3 px-2 text-gray-400 font-medium">College</th>
+                      <th className="text-left py-3 px-2 text-gray-400 font-medium">Task</th>
+                      <th className="text-center py-3 px-2 text-gray-400 font-medium">Points</th>
+                      <th className="text-center py-3 px-2 text-gray-400 font-medium">People Connected</th>
+                      <th className="text-left py-3 px-2 text-gray-400 font-medium">Submission Date</th>
+                      <th className="text-center py-3 px-2 text-gray-400 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSubmissions.slice(0, 20).map((submission) => (
+                      <tr key={submission.id} className="border-b border-gray-700/50 hover:bg-gray-700/30 transition-colors">
+                        <td className="py-3 px-2">
+                          <div className="font-medium text-white">{submission.submissionText.split(' ')[0] || 'Ambassador'}</div>
+                        </td>
+                        <td className="py-3 px-2 text-gray-300">College</td>
+                        <td className="py-3 px-2">
+                          <div className="font-medium text-white">{submission.taskTitle}</div>
+                          <div className="text-xs text-gray-400">ID: {submission.taskId.slice(0, 8)}...</div>
+                        </td>
+                        <td className="py-3 px-2 text-center">
+                          <span className="text-yellow-400 font-bold">{submission.points}</span>
+                        </td>
+                        <td className="py-3 px-2 text-center">
+                          <span className="text-purple-400 font-medium">{submission.peopleConnected || 0}</span>
+                        </td>
+                        <td className="py-3 px-2 text-gray-300">
+                          {new Date(submission.submittedAt).toLocaleDateString()}
+                          <div className="text-xs text-gray-400">
+                            {new Date(submission.submittedAt).toLocaleTimeString()}
+                          </div>
+                        </td>
+                        <td className="py-3 px-2 text-center">
+                          <span className="bg-green-600 text-white px-2 py-1 rounded text-xs font-medium">
+                            {submission.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {filteredSubmissions.length > 20 && (
+                  <div className="mt-4 text-center text-gray-400">
+                    Showing first 20 of {filteredSubmissions.length} submissions. Use export for complete data.
                   </div>
                 )}
               </div>

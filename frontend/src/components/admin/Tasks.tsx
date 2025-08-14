@@ -7,18 +7,18 @@ import {
   CheckCircle,
   Clock,
   AlertTriangle,
-  Eye,
   Edit,
   Trash2,
   Send,
-  Filter,
   Save,
   X,
   Copy
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+// import { Textarea } from '@/components/ui/textarea';
+
+const BACKEND_URL = 'http://127.0.0.1:5000';
 
 interface Task {
   id: string;
@@ -127,20 +127,36 @@ const Tasks: React.FC<{ refreshUser: () => Promise<void> }> = ({ refreshUser }) 
   ];
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setTasks(sampleTasks);
-      } catch (error) {
-        console.error('Error fetching tasks:', error);
-        setTasks(sampleTasks);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+    fetchTasks();
   }, []);
+
+  // Fetch tasks from backend
+  const fetchTasks = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      const response = await fetch(`${BACKEND_URL}/api/admin/tasks`, { headers });
+
+      if (response.ok) {
+        const realTasks = await response.json();
+        console.log('Fetched real tasks:', realTasks);
+        setTasks(realTasks);
+      } else {
+        console.log('API failed, using sample data');
+        setTasks(sampleTasks);
+      }
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      setTasks(sampleTasks);
+    } finally {
+      setLoading(false);
+    }
+  };
 
 
 
@@ -173,53 +189,151 @@ const Tasks: React.FC<{ refreshUser: () => Promise<void> }> = ({ refreshUser }) 
   };
 
   // Handle creating a new task
-  const handleCreateTask = () => {
+  const handleCreateTask = async () => {
     if (!formData.title.trim() || !formData.description.trim()) {
       alert('Please fill in all required fields');
       return;
     }
 
-    const newTask: Task = {
-      id: `task_${Date.now()}`,
-      title: formData.title,
-      description: formData.description,
-      day: formData.day,
-      points: formData.points,
-      status: formData.status,
-      created_by: 'admin@test.com',
-      created_at: new Date().toISOString().split('T')[0],
-      updated_at: new Date().toISOString().split('T')[0]
-    };
+    try {
+      const token = localStorage.getItem('token');
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
 
-    setTasks([...tasks, newTask]);
-    setShowCreateModal(false);
-    resetForm();
+      const taskData = {
+        title: formData.title,
+        description: formData.description,
+        day: formData.day,
+        points: formData.points,
+        status: formData.status
+      };
+
+      const response = await fetch(`${BACKEND_URL}/api/admin/tasks`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(taskData)
+      });
+
+      if (response.ok) {
+        const newTask = await response.json();
+        setTasks([...tasks, newTask]);
+        console.log('Task created successfully:', newTask);
+      } else {
+        // Fallback to local creation
+        const newTask: Task = {
+          id: `task_${Date.now()}`,
+          title: formData.title,
+          description: formData.description,
+          day: formData.day,
+          points: formData.points,
+          status: formData.status,
+          created_by: 'admin@test.com',
+          created_at: new Date().toISOString().split('T')[0],
+          updated_at: new Date().toISOString().split('T')[0]
+        };
+        setTasks([...tasks, newTask]);
+      }
+
+      setShowCreateModal(false);
+      resetForm();
+    } catch (error) {
+      console.error('Error creating task:', error);
+      alert('Failed to create task. Please try again.');
+    }
   };
 
   // Handle editing a task
-  const handleEditTask = () => {
+  const handleEditTask = async () => {
     if (!formData.title.trim() || !formData.description.trim() || !editingTask) {
       alert('Please fill in all required fields');
       return;
     }
 
-    const updatedTask: Task = {
-      ...editingTask,
-      title: formData.title,
-      description: formData.description,
-      day: formData.day,
-      points: formData.points,
-      status: formData.status,
-      updated_at: new Date().toISOString().split('T')[0]
-    };
+    try {
+      const token = localStorage.getItem('token');
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
 
-    setTasks(tasks.map(t => t.id === editingTask.id ? updatedTask : t));
-    setShowEditModal(false);
-    setEditingTask(null);
-    resetForm();
+      const taskData = {
+        title: formData.title,
+        description: formData.description,
+        day: formData.day,
+        points: formData.points,
+        status: formData.status
+      };
+
+      const response = await fetch(`${BACKEND_URL}/api/admin/tasks/${editingTask.id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(taskData)
+      });
+
+      if (response.ok) {
+        const updatedTask = await response.json();
+        setTasks(tasks.map(t => t.id === editingTask.id ? updatedTask : t));
+        console.log('Task updated successfully:', updatedTask);
+      } else {
+        // Fallback to local update
+        const updatedTask: Task = {
+          ...editingTask,
+          title: formData.title,
+          description: formData.description,
+          day: formData.day,
+          points: formData.points,
+          status: formData.status,
+          updated_at: new Date().toISOString().split('T')[0]
+        };
+        setTasks(tasks.map(t => t.id === editingTask.id ? updatedTask : t));
+      }
+
+      setShowEditModal(false);
+      setEditingTask(null);
+      resetForm();
+    } catch (error) {
+      console.error('Error updating task:', error);
+      alert('Failed to update task. Please try again.');
+    }
   };
 
-  const handleTaskAction = (task: Task, action: string) => {
+  // Handle posting a draft task (make it active)
+  const handlePostTask = async (task: Task) => {
+    if (task.status !== 'draft') {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      const response = await fetch(`${BACKEND_URL}/api/admin/tasks/${task.id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ ...task, status: 'active' })
+      });
+
+      if (response.ok) {
+        const updatedTask = await response.json();
+        setTasks(tasks.map(t => t.id === task.id ? updatedTask : t));
+        console.log('Task posted successfully:', updatedTask);
+      } else {
+        // Fallback to local update
+        const updatedTask = { ...task, status: 'active' as const, updated_at: new Date().toISOString().split('T')[0] };
+        setTasks(tasks.map(t => t.id === task.id ? updatedTask : t));
+      }
+    } catch (error) {
+      console.error('Error posting task:', error);
+      alert('Failed to post task. Please try again.');
+    }
+  };
+
+  const handleTaskAction = async (task: Task, action: string) => {
     switch (action) {
       case 'view':
         setSelectedTask(task);
@@ -236,9 +350,14 @@ const Tasks: React.FC<{ refreshUser: () => Promise<void> }> = ({ refreshUser }) 
         });
         setShowEditModal(true);
         break;
+      case 'post':
+        if (confirm(`Are you sure you want to post "${task.title}" and make it available to ambassadors?`)) {
+          await handlePostTask(task);
+        }
+        break;
       case 'delete':
         if (confirm(`Are you sure you want to delete "${task.title}"?`)) {
-          setTasks(tasks.filter(t => t.id !== task.id));
+          await handleDeleteTask(task);
         }
         break;
       case 'duplicate':
@@ -254,6 +373,34 @@ const Tasks: React.FC<{ refreshUser: () => Promise<void> }> = ({ refreshUser }) 
         break;
       default:
         break;
+    }
+  };
+
+  // Handle deleting a task
+  const handleDeleteTask = async (task: Task) => {
+    try {
+      const token = localStorage.getItem('token');
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      const response = await fetch(`${BACKEND_URL}/api/admin/tasks/${task.id}`, {
+        method: 'DELETE',
+        headers
+      });
+
+      if (response.ok) {
+        setTasks(tasks.filter(t => t.id !== task.id));
+        console.log('Task deleted successfully');
+      } else {
+        // Fallback to local deletion
+        setTasks(tasks.filter(t => t.id !== task.id));
+      }
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      // Still remove from local state
+      setTasks(tasks.filter(t => t.id !== task.id));
     }
   };
 
@@ -364,9 +511,7 @@ const Tasks: React.FC<{ refreshUser: () => Promise<void> }> = ({ refreshUser }) 
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-64 bg-gray-700 border-gray-600 text-white"
                 />
-                <Button variant="outline" className="border-gray-600 text-gray-300">
-                  <Filter className="h-4 w-4" />
-                </Button>
+
               </div>
             </div>
           </CardContent>
@@ -400,9 +545,9 @@ const Tasks: React.FC<{ refreshUser: () => Promise<void> }> = ({ refreshUser }) 
                           <p className="text-gray-400 text-sm line-clamp-2">{task.description}</p>
                         </div>
                       </td>
-                      <td className="py-3 px-4">
-                        <span className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium">
-                          Day {task.day}
+                      <td className="py-3 px-2">
+                        <span className="bg-blue-600 text-white px-3 py-1.5 rounded-full text-xs font-semibold inline-block min-w-[50px] text-center">
+                          {task.day}
                         </span>
                       </td>
                       <td className="py-3 px-4">
@@ -424,22 +569,24 @@ const Tasks: React.FC<{ refreshUser: () => Promise<void> }> = ({ refreshUser }) 
                       <td className="py-3 px-4">
                         <div className="flex items-center space-x-2">
                           <button
-                            onClick={() => handleTaskAction(task, 'view')}
-                            className="p-1 text-blue-400 hover:text-blue-300"
-                            title="View Details"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button
                             onClick={() => handleTaskAction(task, 'edit')}
                             className="p-1 text-yellow-400 hover:text-yellow-300"
                             title="Edit Task"
                           >
                             <Edit className="h-4 w-4" />
                           </button>
+                          {task.status === 'draft' && (
+                            <button
+                              onClick={() => handleTaskAction(task, 'post')}
+                              className="p-1 text-green-400 hover:text-green-300"
+                              title="Post Task (Make Active)"
+                            >
+                              <Send className="h-4 w-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => handleTaskAction(task, 'duplicate')}
-                            className="p-1 text-green-400 hover:text-green-300"
+                            className="p-1 text-purple-400 hover:text-purple-300"
                             title="Duplicate Task"
                           >
                             <Copy className="h-4 w-4" />
@@ -492,26 +639,26 @@ const Tasks: React.FC<{ refreshUser: () => Promise<void> }> = ({ refreshUser }) 
                       <p className="text-gray-400 text-sm">Points</p>
                       <p className="text-white">{selectedTask.points}</p>
                     </div>
-                    <div>
+                    {/* <div>
                       <p className="text-gray-400 text-sm">Status</p>
                       <span className={`px-2 py-1 rounded text-xs font-medium capitalize ${
                         selectedTask.status === 'active' ? 'bg-green-600 text-white' : 'bg-yellow-600 text-white'
                       }`}>
                         {selectedTask.status}
                       </span>
-                    </div>
+                    </div> */}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
+                  {/* <div className="grid grid-cols-2 gap-4"> */}
+                    {/* <div>
                       <p className="text-gray-400 text-sm">Created</p>
                       <p className="text-white">{selectedTask.created_at}</p>
-                    </div>
-                    <div>
+                    </div> */}
+                    {/* <div>
                       <p className="text-gray-400 text-sm">Last Updated</p>
                       <p className="text-white">{selectedTask.updated_at || selectedTask.created_at}</p>
-                    </div>
-                  </div>
+                    </div> */}
+                  {/* </div> */}
                 </div>
 
                 <div className="mt-6 flex justify-end gap-3">
@@ -568,12 +715,12 @@ const Tasks: React.FC<{ refreshUser: () => Promise<void> }> = ({ refreshUser }) 
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">Description *</label>
-                    <Textarea
+                    <textarea
                       value={formData.description}
                       onChange={(e) => handleInputChange('description', e.target.value)}
                       placeholder="Enter detailed task description"
                       rows={4}
-                      className="bg-gray-800 border-gray-600 text-white"
+                      className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 
@@ -670,12 +817,12 @@ const Tasks: React.FC<{ refreshUser: () => Promise<void> }> = ({ refreshUser }) 
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">Description *</label>
-                    <Textarea
+                    <textarea
                       value={formData.description}
                       onChange={(e) => handleInputChange('description', e.target.value)}
                       placeholder="Enter detailed task description"
                       rows={4}
-                      className="bg-gray-800 border-gray-600 text-white"
+                      className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 

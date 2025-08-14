@@ -11,7 +11,6 @@ interface DashboardStats {
   tasks_completed: number;
   total_points: number;
   current_rank: string;
-  completion_rate: number;
   people_connected: number;
   next_task?: {
     id: string;
@@ -36,7 +35,6 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
     tasks_completed: 12,
     total_points: 850,
     current_rank: "Top 10%",
-    completion_rate: 75,
     people_connected: 45,
     next_task: {
       id: "task_001",
@@ -148,7 +146,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                 <div>
                   <p className="text-gray-400 text-sm font-medium">Tasks Completed</p>
                   <p className="text-2xl font-bold text-white mt-1">{stats.completedTasks || 0}</p>
-                  <p className="text-blue-400 text-xs mt-1">{stats.completionRate.toFixed(1)}% completion rate</p>
+                  <p className="text-blue-400 text-xs mt-1">Total completed</p>
                 </div>
                 <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center">
                   <CheckCircle className="h-6 w-6 text-white" />
@@ -200,13 +198,13 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
               <div className="space-y-6 h-full flex flex-col">
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-300">Completion Rate</span>
-                    <span className="text-sm font-medium text-white">{stats.completionRate.toFixed(1)}%</span>
+                    <span className="text-sm font-medium text-gray-300">Tasks Progress</span>
+                    <span className="text-sm font-medium text-white">{stats.completedTasks} / {stats.totalTasks}</span>
                   </div>
                   <div className="w-full bg-gray-700 rounded-full h-3">
                     <div
                       className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500"
-                      style={{ width: `${stats.completionRate}%` }}
+                      style={{ width: `${stats.totalTasks > 0 ? (stats.completedTasks / stats.totalTasks) * 100 : 0}%` }}
                     ></div>
                   </div>
                 </div>
