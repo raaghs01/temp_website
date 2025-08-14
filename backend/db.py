@@ -15,31 +15,28 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL is not set. Please check your .env file.")
 
-# Create async engine (supports both SQLite and PostgreSQL)
-if DATABASE_URL.startswith("sqlite"):
-    # SQLite configuration
-    engine = create_async_engine(
-        DATABASE_URL,
-        echo=False,
-        connect_args={"check_same_thread": False}
-    )
-else:
-    # PostgreSQL configuration with pgbouncer compatibility
-    engine = create_async_engine(
-        DATABASE_URL,
-        echo=False,
-        connect_args={
-            "prepared_statement_cache_size": 0,
-            "statement_cache_size": 0,
-            "server_settings": {
-                "application_name": "ambassador_platform",
-            }
-        },
-        pool_pre_ping=True,
-        pool_recycle=300,
-        pool_size=5,
-        max_overflow=10,
-    )
+# Create async engine with proper pgbouncer compatibility
+# Remove query parameters from URL and set them in connect_args
+base_url = DATABASE_URL.split('?')[0]
+
+engine = create_async_engine(
+    base_url,
+    echo=False,
+    connect_args={
+        "prepared_statement_cache_size": 0,  # Disable prepared statement cache for PgBouncer
+        "statement_cache_size": 0,           # Disable statement cache
+        "server_settings": {
+            "application_name": "ambassador_platform",
+        }
+    },
+    execution_options={
+        "compiled_cache": {},  # Disable compiled cache
+    },
+    pool_pre_ping=True,
+    pool_recycle=300,  # Recycle connections every 5 minutes
+    pool_size=5,       # Limit connection pool size
+    max_overflow=10,   # Maximum overflow connections
+)
 
 # Create async session factory
 AsyncSessionLocal = sessionmaker(

@@ -130,7 +130,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
-    except (jwt.DecodeError, jwt.InvalidTokenError, Exception):
+    except (jwt.DecodeError, jwt.InvalidSignatureError, Exception):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 async def calculate_user_rank(user_id: str, db: AsyncSession) -> int:
