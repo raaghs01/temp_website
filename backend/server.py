@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from db import get_db, init_db, AsyncSessionLocal
 from services.database_service import DatabaseService
 from models import User, Task, Submission
@@ -18,6 +19,7 @@ import hashlib
 import base64
 from io import BytesIO
 from contextlib import asynccontextmanager
+
 
 # Load environment variables
 ROOT_DIR = Path(__file__).parent
@@ -92,6 +94,12 @@ class UserStatusUpdateRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
+
+class ProfileUpdate(BaseModel):
+    name: str
+    email: str
+    college: str
+    group_leader_name: str
 
 # Utility functions
 def hash_password(password: str) -> str:
@@ -336,7 +344,9 @@ async def login(login_data: UserLogin, db: AsyncSession = Depends(get_db)):
 @api_router.get("/profile")
 async def get_profile(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     rank = await calculate_user_rank(current_user.id, db)
-    
+
+
+
     return UserProfile(
         id=current_user.id,
         email=current_user.email,
@@ -351,6 +361,43 @@ async def get_profile(current_user: User = Depends(get_current_user), db: AsyncS
         registration_date=current_user.registration_date,
         status=current_user.status
     )
+
+@api_router.put("/profile")
+async def update_profile(
+    profile: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # Optional: validate email or fields before saving
+    if not profile.name.strip():
+        raise HTTPException(status_code=400, detail="Name cannot be empty")
+
+    # Fetch the latest user instance from DB
+    result = await db.execute(select(User).where(User.id == current_user.id))
+    user_obj = result.scalars().first()
+
+    if not user_obj:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Update fields
+    user_obj.name = profile.name
+    user_obj.email = profile.email
+    user_obj.college = profile.college
+    user_obj.group_leader_name = profile.group_leader_name
+
+    await db.commit()
+    await db.refresh(user_obj)
+
+    return {
+        "status": "success",
+        "message": "Profile updated successfully",
+        "data": {
+            "name": user_obj.name,
+            "email": user_obj.email,
+            "college": user_obj.college,
+            "group_leader_name": user_obj.group_leader_name
+        }
+    }
 
 @api_router.get("/tasks")
 async def get_tasks(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -556,16 +603,17 @@ async def change_password(
 #     await init_db()
 #     await initialize_tasks()
 
-# Include the router in the main app
-app.include_router(api_router)
-
+# Add CORS middleware BEFORE including routers
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:5000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include the router in the main app
+app.include_router(api_router)
 
 # Configure logging
 logging.basicConfig(

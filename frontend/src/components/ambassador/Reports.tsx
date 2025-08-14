@@ -27,10 +27,10 @@ interface ReportData {
   totalPoints: number;
   totalPeopleConnected: number;
   averageTaskTime: string;
-  completionRate: number;
+  // completionRate: number;
   submissions: TaskSubmission[];
-  categoryBreakdown: { [key: string]: number };
-  monthlyProgress: { month: string; tasks: number; points: number }[];
+  // categoryBreakdown: { [key: string]: number };
+  // monthlyProgress: { month: string; tasks: number; points: number }[];
 }
 
 interface UserProfile {
@@ -97,8 +97,8 @@ const Reports: React.FC = () => {
           status: 'completed' as const,
           points: sub.points_earned,
           peopleConnected: sub.people_connected,
-          category: sub.category || 'General',
-          priority: sub.priority || 'medium'
+          // category: sub.category || 'General',
+          // priority: sub.priority || 'medium'
         }));
 
         // If no real submissions, add sample data for demonstration
@@ -203,10 +203,10 @@ const Reports: React.FC = () => {
       totalPoints,
       totalPeopleConnected,
       averageTaskTime: '2.5 hours', // This could be calculated if we had start times
-      completionRate: 100, // Since we only show completed tasks
+      // completionRate: 100, // Since we only show completed tasks
       submissions,
-      categoryBreakdown,
-      monthlyProgress: monthlyProgress.sort((a, b) => a.month.localeCompare(b.month))
+      // categoryBreakdown,
+      // monthlyProgress: monthlyProgress.sort((a, b) => a.month.localeCompare(b.month))
     };
   };
 
@@ -222,7 +222,7 @@ const Reports: React.FC = () => {
         totalPoints: stats.totalPoints,
         totalPeopleConnected: stats.totalPeopleConnected,
         averageTaskTime: '2.5 hours',
-        completionRate: stats.completionRate,
+        // completionRate: stats.completionRate,
         submissions: completions.map(comp => ({
           id: comp.id,
           taskId: comp.taskId,
@@ -237,8 +237,8 @@ const Reports: React.FC = () => {
           category: comp.category,
           priority: comp.priority
         })),
-        categoryBreakdown: stats.categoryBreakdown,
-        monthlyProgress: stats.monthlyProgress
+        // categoryBreakdown: stats.categoryBreakdown,
+        // monthlyProgress: stats.monthlyProgress
       };
       setReportData(enhancedReportData);
     }
@@ -289,11 +289,11 @@ const Reports: React.FC = () => {
       ['Total Tasks Completed', reportData.totalTasks],
       ['Total Points Earned', reportData.totalPoints],
       ['Total People Connected', reportData.totalPeopleConnected],
-      ['Average Task Time', reportData.averageTaskTime],
-      ['Completion Rate', `${reportData.completionRate}%`],
-      ['', ''],
-      ['Category Breakdown', ''],
-      ...Object.entries(reportData.categoryBreakdown).map(([category, count]) => [category, count])
+      // ['Average Task Time', reportData.averageTaskTime],
+      // ['Completion Rate', `${reportData.completionRate}%`],
+      // ['', ''],
+      // ['Category Breakdown', ''],
+      // ...Object.entries(reportData.categoryBreakdown).map(([category, count]) => [category, count])
     ];
 
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
@@ -452,17 +452,17 @@ const Reports: React.FC = () => {
     XLSX.utils.book_append_sheet(workbook, submissionsSheet, 'Detailed Task Submissions');
 
     // Monthly Progress Sheet
-    const monthlyData = [
-      ['Month', 'Tasks Completed', 'Points Earned'],
-      ...reportData.monthlyProgress.map(month => [
-        month.month,
-        month.tasks,
-        month.points
-      ])
-    ];
+    // const monthlyData = [
+    //   // ['Month', 'Tasks Completed', 'Points Earned'],
+    //   // ...reportData.monthlyProgress.map(month => [
+    //   //   month.month,
+    //   //   month.tasks,
+    //   //   month.points
+    //   // ])
+    // ];
 
-    const monthlySheet = XLSX.utils.aoa_to_sheet(monthlyData);
-    XLSX.utils.book_append_sheet(workbook, monthlySheet, 'Monthly Progress');
+    // const monthlySheet = XLSX.utils.aoa_to_sheet(monthlyData);
+    // XLSX.utils.book_append_sheet(workbook, monthlySheet, 'Monthly Progress');
 
     // Task Performance Analytics Sheet
     const performanceData = [
@@ -473,7 +473,7 @@ const Reports: React.FC = () => {
       ['', ''],
       ['Category Performance', ''],
       ['Category', 'Tasks Completed', 'Total Points', 'Avg Points per Task', 'Total People Connected', 'Avg People per Task'],
-      ...Object.entries(reportData.categoryBreakdown).map(([category, count]) => {
+      ...Object.entries(reportData).map(([category, count]) => {
         const categorySubmissions = reportData.submissions.filter(sub => (sub.category || 'General') === category);
         const totalPoints = categorySubmissions.reduce((sum, sub) => sum + sub.points, 0);
         const totalPeople = categorySubmissions.reduce((sum, sub) => sum + (sub.peopleConnected || 0), 0);
@@ -481,9 +481,9 @@ const Reports: React.FC = () => {
           category,
           count,
           totalPoints,
-          count > 0 ? Math.round(totalPoints / count) : 0,
+          // count > 0 ? Math.round(totalPoints / count) : 0,
           totalPeople,
-          count > 0 ? Math.round(totalPeople / count) : 0
+          // count > 0 ? Math.round(totalPeople / count) : 0
         ];
       }),
       ['', ''],
@@ -732,13 +732,13 @@ const Reports: React.FC = () => {
         totalPoints: reportData.totalPoints,
         totalPeopleConnected: reportData.totalPeopleConnected,
         averageTaskTime: reportData.averageTaskTime,
-        completionRate: reportData.completionRate,
+        // completionRate: reportData.completionRate,
         averageWordCount: enhancedSubmissions.reduce((sum, sub) => sum + sub.analysis.wordCount, 0) / enhancedSubmissions.length,
         tasksWithImages: enhancedSubmissions.filter(sub => sub.analysis.hasImageProof).length,
         excellentPerformances: enhancedSubmissions.filter(sub => sub.analysis.performanceRating === 'Excellent').length
       },
-      categoryBreakdown: reportData.categoryBreakdown,
-      monthlyProgress: reportData.monthlyProgress,
+      // categoryBreakdown: reportData.categoryBreakdown,
+      // monthlyProgress: reportData.monthlyProgress,
       submissions: enhancedSubmissions
     };
 
