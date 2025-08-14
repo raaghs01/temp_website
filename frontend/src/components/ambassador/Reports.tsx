@@ -234,8 +234,7 @@ const Reports: React.FC = () => {
           status: 'completed' as const,
           points: comp.points,
           peopleConnected: comp.peopleConnected,
-          category: comp.category,
-          priority: comp.priority
+          category: comp.category
         })),
         // categoryBreakdown: stats.categoryBreakdown,
         // monthlyProgress: stats.monthlyProgress

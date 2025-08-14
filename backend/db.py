@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from databases import Database
@@ -52,11 +52,25 @@ async def init_db():
         # Connect to database
         await database.connect()
         print(f"Successfully connected to PostgreSQL at {DATABASE_URL}")
-        
+
         # Create all tables
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        
+
+            # Check if last_submission_date column exists and add it if missing
+            await conn.execute(text("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'users' AND column_name = 'last_submission_date'
+                    ) THEN
+                        ALTER TABLE users ADD COLUMN last_submission_date TIMESTAMP;
+                        CREATE INDEX IF NOT EXISTS ix_users_last_submission_date ON users(last_submission_date);
+                    END IF;
+                END $$;
+            """))
+
         print("Database initialization completed successfully!")
         return True
     except Exception as e:

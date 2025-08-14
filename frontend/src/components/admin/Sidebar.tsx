@@ -12,6 +12,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, user, logout
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '🏠' },
     // { id: 'ambassadors', label: 'Ambassadors', icon: '👥' },
+    { id: 'tasks', label: 'Tasks', icon: '📋' },
     { id: 'leaderboard', label: 'Leaderboard', icon: '🏆' },
     // { id: 'analytics', label: 'Analytics', icon: '📊' },
     { id: 'reports', label: 'Reports', icon: '📈' },

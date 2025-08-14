@@ -25,6 +25,7 @@ class User(Base):
     # Metadata
     registration_date = Column(DateTime, default=datetime.utcnow, index=True)
     last_login = Column(DateTime, nullable=True)
+    last_submission_date = Column(DateTime, nullable=True, index=True)
     is_active = Column(Boolean, default=True)
     status = Column(String, default="active")
     

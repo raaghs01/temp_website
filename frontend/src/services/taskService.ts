@@ -7,7 +7,6 @@ export interface TaskCompletion {
   taskDescription: string;
   day: number;
   category: string;
-  priority: string;
   points: number;
   peopleConnected: number;
   submissionText: string;
@@ -36,7 +35,6 @@ export interface Task {
   description: string;
   points: number;
   deadline: string;
-  priority: 'high' | 'medium' | 'low';
   status: 'available' | 'in_progress' | 'completed' | 'locked';
   category: string;
   day: number;
@@ -115,21 +113,12 @@ class TaskService {
           return 'Advanced Tasks';
         };
 
-        // Determine priority based on day
-        const getPriority = (day: number) => {
-          if (day === 0) return 'high';
-          if (day <= 3) return 'high';
-          if (day <= 7) return 'medium';
-          return 'low';
-        };
-
         return {
           id: task.id,
           title: task.title,
           description: task.description,
           points: task.points_reward,
           deadline: `Day ${task.day}`,
-          priority: getPriority(task.day),
           status,
           category: getCategory(task),
           day: task.day,
@@ -170,14 +159,6 @@ class TaskService {
           return 'Advanced Tasks';
         };
 
-        // Determine priority based on day
-        const getPriority = (day: number) => {
-          if (day === 0) return 'high';
-          if (day <= 3) return 'high';
-          if (day <= 7) return 'medium';
-          return 'low';
-        };
-
         return {
           id: sub.id,
           taskId: sub.task_id,
@@ -185,7 +166,6 @@ class TaskService {
           taskDescription: (task as any)?.description || '',
           day: sub.day,
           category: getCategory(task),
-          priority: getPriority(sub.day),
           points: sub.points_earned,
           peopleConnected: sub.people_connected || 0,
           submissionText: sub.status_text || '',

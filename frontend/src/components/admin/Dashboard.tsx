@@ -379,7 +379,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
         </div>
 
         {/* System Stats Grid - All Metrics in One Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-4 mb-8">
           <Card className="bg-gray-800 border-gray-700 hover:bg-gray-750 transition-colors">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">

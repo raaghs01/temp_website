@@ -541,6 +541,8 @@ const Dashboard: React.FC = () => {
       switch (activeTab) {
         case 'dashboard':
           return <Admin.Dashboard user={user} refreshUser={refreshUser} />;
+        case 'tasks':
+          return <Admin.Tasks refreshUser={refreshUser} />;
         case 'ambassadors':
           return <Admin.Tasks refreshUser={refreshUser} />;
         case 'leaderboard':

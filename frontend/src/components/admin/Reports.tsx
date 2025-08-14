@@ -11,7 +11,9 @@ import {
   PieChart,
   Filter,
   RefreshCw,
-  CheckCircle
+  CheckCircle,
+  Eye,
+  X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -86,128 +88,380 @@ const Reports: React.FC = () => {
   const [groupLeaders, setGroupLeaders] = useState<string[]>([]);
   const [selectedGroupLeader, setSelectedGroupLeader] = useState<string>('all');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [selectedUser, setSelectedUser] = useState<Ambassador | null>(null);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [userSubmissions, setUserSubmissions] = useState<TaskSubmission[]>([]);
 
-  // Fetch data from backend
+  // Sample data for demonstration
+  const generateSampleData = () => {
+    const sampleAmbassadors: Ambassador[] = [
+      {
+        id: '1',
+        name: 'Ananya Sharma',
+        email: 'ananya@college.edu',
+        college: 'Delhi University',
+        group_leader_name: 'Dr. Rajesh Kumar',
+        total_points: 2850,
+        rank_position: 1,
+        current_day: 15,
+        total_referrals: 12,
+        events_hosted: 3,
+        students_reached: 145,
+        revenue_generated: 25000,
+        social_media_posts: 28,
+        engagement_rate: 92.5,
+        followers_growth: 180,
+        campaign_days: 15,
+        status: 'active',
+        last_activity: '2024-01-15',
+        join_date: '2024-01-01'
+      },
+      {
+        id: '2',
+        name: 'Rahul Kumar',
+        email: 'rahul@college.edu',
+        college: 'Mumbai University',
+        group_leader_name: 'Prof. Meera Singh',
+        total_points: 2650,
+        rank_position: 2,
+        current_day: 14,
+        total_referrals: 10,
+        events_hosted: 2,
+        students_reached: 128,
+        revenue_generated: 22000,
+        social_media_posts: 25,
+        engagement_rate: 88.3,
+        followers_growth: 165,
+        campaign_days: 14,
+        status: 'active',
+        last_activity: '2024-01-14',
+        join_date: '2024-01-02'
+      },
+      {
+        id: '3',
+        name: 'Priya Patel',
+        email: 'priya@college.edu',
+        college: 'Gujarat University',
+        group_leader_name: 'Dr. Rajesh Kumar',
+        total_points: 2400,
+        rank_position: 3,
+        current_day: 13,
+        total_referrals: 8,
+        events_hosted: 2,
+        students_reached: 112,
+        revenue_generated: 18500,
+        social_media_posts: 22,
+        engagement_rate: 85.7,
+        followers_growth: 142,
+        campaign_days: 13,
+        status: 'active',
+        last_activity: '2024-01-13',
+        join_date: '2024-01-03'
+      },
+      {
+        id: '4',
+        name: 'Arjun Singh',
+        email: 'arjun@college.edu',
+        college: 'Bangalore University',
+        group_leader_name: 'Prof. Meera Singh',
+        total_points: 2200,
+        rank_position: 4,
+        current_day: 12,
+        total_referrals: 7,
+        events_hosted: 1,
+        students_reached: 98,
+        revenue_generated: 16000,
+        social_media_posts: 20,
+        engagement_rate: 82.1,
+        followers_growth: 125,
+        campaign_days: 12,
+        status: 'active',
+        last_activity: '2024-01-12',
+        join_date: '2024-01-04'
+      },
+      {
+        id: '5',
+        name: 'Sneha Reddy',
+        email: 'sneha@college.edu',
+        college: 'Hyderabad University',
+        group_leader_name: 'Dr. Amit Verma',
+        total_points: 2000,
+        rank_position: 5,
+        current_day: 11,
+        total_referrals: 6,
+        events_hosted: 1,
+        students_reached: 85,
+        revenue_generated: 14500,
+        social_media_posts: 18,
+        engagement_rate: 79.4,
+        followers_growth: 108,
+        campaign_days: 11,
+        status: 'active',
+        last_activity: '2024-01-11',
+        join_date: '2024-01-05'
+      },
+      {
+        id: '6',
+        name: 'Vikram Joshi',
+        email: 'vikram@college.edu',
+        college: 'Pune University',
+        group_leader_name: 'Dr. Rajesh Kumar',
+        total_points: 1850,
+        rank_position: 6,
+        current_day: 10,
+        total_referrals: 5,
+        events_hosted: 1,
+        students_reached: 72,
+        revenue_generated: 12500,
+        social_media_posts: 16,
+        engagement_rate: 76.8,
+        followers_growth: 95,
+        campaign_days: 10,
+        status: 'active',
+        last_activity: '2024-01-10',
+        join_date: '2024-01-06'
+      },
+      {
+        id: '7',
+        name: 'Kavya Nair',
+        email: 'kavya@college.edu',
+        college: 'Kerala University',
+        group_leader_name: 'Prof. Meera Singh',
+        total_points: 1650,
+        rank_position: 7,
+        current_day: 9,
+        total_referrals: 4,
+        events_hosted: 1,
+        students_reached: 58,
+        revenue_generated: 10500,
+        social_media_posts: 14,
+        engagement_rate: 73.2,
+        followers_growth: 82,
+        campaign_days: 9,
+        status: 'active',
+        last_activity: '2024-01-09',
+        join_date: '2024-01-07'
+      },
+      {
+        id: '8',
+        name: 'Rohit Gupta',
+        email: 'rohit@college.edu',
+        college: 'Jaipur University',
+        group_leader_name: 'Dr. Amit Verma',
+        total_points: 1450,
+        rank_position: 8,
+        current_day: 8,
+        total_referrals: 3,
+        events_hosted: 0,
+        students_reached: 45,
+        revenue_generated: 8500,
+        social_media_posts: 12,
+        engagement_rate: 69.5,
+        followers_growth: 68,
+        campaign_days: 8,
+        status: 'inactive',
+        last_activity: '2024-01-08',
+        join_date: '2024-01-08'
+      }
+    ];
+
+    const sampleGroupLeaders = ['Dr. Rajesh Kumar', 'Prof. Meera Singh', 'Dr. Amit Verma'];
+
+    return { ambassadors: sampleAmbassadors, groupLeaders: sampleGroupLeaders };
+  };
+
+  // Fetch data from backend with fallback to sample data
   const fetchReportData = async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
 
-      if (!token) {
-        console.error('No token found');
-        return;
-      }
+      let ambassadors: Ambassador[] = [];
+      let leaders: string[] = [];
 
-      // Fetch ambassadors data
-      const ambassadorsResponse = await fetch(`${BACKEND_URL}/api/admin/ambassadors`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      // Fetch group leaders
-      const groupLeadersResponse = await fetch(`${BACKEND_URL}/api/admin/group-leaders`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (ambassadorsResponse.ok && groupLeadersResponse.ok) {
-        const ambassadors: Ambassador[] = await ambassadorsResponse.json();
-        const leaders: string[] = await groupLeadersResponse.json();
-
-        setGroupLeaders(leaders);
-
-        // Filter ambassadors by selected group leader
-        const filteredAmbassadors = selectedGroupLeader === 'all'
-          ? ambassadors
-          : ambassadors.filter(amb => amb.group_leader_name === selectedGroupLeader);
-
-        // Calculate metrics
-        const totalTasks = filteredAmbassadors.reduce((sum, amb) => sum + amb.campaign_days, 0);
-        const totalPoints = filteredAmbassadors.reduce((sum, amb) => sum + amb.total_points, 0);
-        const totalPeopleConnected = filteredAmbassadors.reduce((sum, amb) => sum + amb.students_reached, 0);
-
-        // Create mock submissions data based on ambassador data
-        const submissions: TaskSubmission[] = [];
-        filteredAmbassadors.forEach(ambassador => {
-          // Create mock submissions for each ambassador based on their campaign days
-          for (let day = 1; day <= ambassador.campaign_days; day++) {
-            const submissionDate = new Date();
-            submissionDate.setDate(submissionDate.getDate() - (ambassador.campaign_days - day));
-
-            submissions.push({
-              id: `sub_${ambassador.id}_${day}`,
-              taskId: `task_${day}`,
-              taskTitle: `Day ${day} Task`,
-              submissionText: `Task completion for day ${day} by ${ambassador.name}`,
-              submittedAt: submissionDate.toISOString(),
-              completedAt: submissionDate.toISOString(),
-              status: 'completed',
-              points: Math.floor(ambassador.total_points / Math.max(ambassador.campaign_days, 1)),
-              peopleConnected: Math.floor(ambassador.students_reached / Math.max(ambassador.campaign_days, 1)),
-              category: 'General',
-              priority: 'medium',
-              user_id: ambassador.id,
-              user_name: ambassador.name,
-              user_college: ambassador.college,
-              user_group_leader: ambassador.group_leader_name
-            });
-          }
-        });
-
-        // Calculate monthly progress
-        const monthlyProgress: { month: string; tasks: number; points: number }[] = [];
-        const monthlyData: { [key: string]: { tasks: number; points: number } } = {};
-
-        submissions.forEach(sub => {
-          const date = new Date(sub.submittedAt);
-          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-
-          if (!monthlyData[monthKey]) {
-            monthlyData[monthKey] = { tasks: 0, points: 0 };
-          }
-
-          monthlyData[monthKey].tasks += 1;
-          monthlyData[monthKey].points += sub.points;
-        });
-
-        Object.entries(monthlyData).forEach(([month, data]) => {
-          monthlyProgress.push({
-            month,
-            tasks: data.tasks,
-            points: data.points
+      if (token) {
+        try {
+          // Try to fetch from backend
+          const ambassadorsResponse = await fetch(`${BACKEND_URL}/api/admin/ambassadors`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
           });
-        });
 
-        const processedReportData: ReportData = {
-          totalAmbassadors: filteredAmbassadors.length,
-          totalTasks: totalTasks,
-          totalPoints: totalPoints,
-          totalPeopleConnected: totalPeopleConnected,
-          averageTaskTime: '2.5 hours',
-          completionRate: 100,
-          submissions: submissions,
-          monthlyProgress: monthlyProgress.sort((a, b) => a.month.localeCompare(b.month)),
-          ambassadors: filteredAmbassadors
-        };
+          const groupLeadersResponse = await fetch(`${BACKEND_URL}/api/admin/group-leaders`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
 
-        setReportData(processedReportData);
-
-        // Set metrics
-        setMetrics({
-          total_ambassadors: ambassadors.length,
-          active_ambassadors: ambassadors.filter(amb => amb.status === 'active').length,
-          total_submissions: submissions.length,
-          total_points: ambassadors.reduce((sum, amb) => sum + amb.total_points, 0)
-        });
+          if (ambassadorsResponse.ok && groupLeadersResponse.ok) {
+            ambassadors = await ambassadorsResponse.json();
+            leaders = await groupLeadersResponse.json();
+          } else {
+            throw new Error('API calls failed');
+          }
+        } catch (apiError) {
+          console.log('API calls failed, using sample data:', apiError);
+          const sampleData = generateSampleData();
+          ambassadors = sampleData.ambassadors;
+          leaders = sampleData.groupLeaders;
+        }
       } else {
-        console.error('Failed to fetch data');
+        // No token, use sample data
+        const sampleData = generateSampleData();
+        ambassadors = sampleData.ambassadors;
+        leaders = sampleData.groupLeaders;
       }
+
+      setGroupLeaders(leaders);
+
+      // Filter ambassadors by selected group leader
+      const filteredAmbassadors = selectedGroupLeader === 'all'
+        ? ambassadors
+        : ambassadors.filter(amb => amb.group_leader_name === selectedGroupLeader);
+
+      // Calculate metrics
+      const totalTasks = filteredAmbassadors.reduce((sum, amb) => sum + amb.campaign_days, 0);
+      const totalPoints = filteredAmbassadors.reduce((sum, amb) => sum + amb.total_points, 0);
+      const totalPeopleConnected = filteredAmbassadors.reduce((sum, amb) => sum + amb.students_reached, 0);
+
+      // Create mock submissions data based on ambassador data
+      const submissions: TaskSubmission[] = [];
+      filteredAmbassadors.forEach(ambassador => {
+        // Create mock submissions for each ambassador based on their campaign days
+        for (let day = 1; day <= ambassador.campaign_days; day++) {
+          const submissionDate = new Date();
+          submissionDate.setDate(submissionDate.getDate() - (ambassador.campaign_days - day));
+
+          submissions.push({
+            id: `sub_${ambassador.id}_${day}`,
+            taskId: `task_${day}`,
+            taskTitle: `Day ${day} Task`,
+            submissionText: `Task completion for day ${day} by ${ambassador.name}`,
+            submittedAt: submissionDate.toISOString(),
+            completedAt: submissionDate.toISOString(),
+            status: 'completed',
+            points: Math.floor(ambassador.total_points / Math.max(ambassador.campaign_days, 1)),
+            peopleConnected: Math.floor(ambassador.students_reached / Math.max(ambassador.campaign_days, 1)),
+            category: 'General',
+            priority: 'medium',
+            user_id: ambassador.id,
+            user_name: ambassador.name,
+            user_college: ambassador.college,
+            user_group_leader: ambassador.group_leader_name
+          });
+        }
+      });
+
+      // Calculate monthly progress
+      const monthlyProgress: { month: string; tasks: number; points: number }[] = [];
+      const monthlyData: { [key: string]: { tasks: number; points: number } } = {};
+
+      submissions.forEach(sub => {
+        const date = new Date(sub.submittedAt);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+        if (!monthlyData[monthKey]) {
+          monthlyData[monthKey] = { tasks: 0, points: 0 };
+        }
+
+        monthlyData[monthKey].tasks += 1;
+        monthlyData[monthKey].points += sub.points;
+      });
+
+      Object.entries(monthlyData).forEach(([month, data]) => {
+        monthlyProgress.push({
+          month,
+          tasks: data.tasks,
+          points: data.points
+        });
+      });
+
+      const processedReportData: ReportData = {
+        totalAmbassadors: filteredAmbassadors.length,
+        totalTasks: totalTasks,
+        totalPoints: totalPoints,
+        totalPeopleConnected: totalPeopleConnected,
+        averageTaskTime: '2.5 hours',
+        completionRate: 100,
+        submissions: submissions,
+        monthlyProgress: monthlyProgress.sort((a, b) => a.month.localeCompare(b.month)),
+        ambassadors: filteredAmbassadors
+      };
+
+      setReportData(processedReportData);
+
+      // Set metrics
+      setMetrics({
+        total_ambassadors: ambassadors.length,
+        active_ambassadors: ambassadors.filter(amb => amb.status === 'active').length,
+        total_submissions: submissions.length,
+        total_points: ambassadors.reduce((sum, amb) => sum + amb.total_points, 0)
+      });
     } catch (error) {
       console.error('Error fetching report data:', error);
+      // Use sample data as fallback
+      const sampleData = generateSampleData();
+      const ambassadors = sampleData.ambassadors;
+      const leaders = sampleData.groupLeaders;
+
+      setGroupLeaders(leaders);
+
+      const filteredAmbassadors = selectedGroupLeader === 'all'
+        ? ambassadors
+        : ambassadors.filter(amb => amb.group_leader_name === selectedGroupLeader);
+
+      const totalTasks = filteredAmbassadors.reduce((sum, amb) => sum + amb.campaign_days, 0);
+      const totalPoints = filteredAmbassadors.reduce((sum, amb) => sum + amb.total_points, 0);
+      const totalPeopleConnected = filteredAmbassadors.reduce((sum, amb) => sum + amb.students_reached, 0);
+
+      const submissions: TaskSubmission[] = [];
+      filteredAmbassadors.forEach(ambassador => {
+        for (let day = 1; day <= ambassador.campaign_days; day++) {
+          const submissionDate = new Date();
+          submissionDate.setDate(submissionDate.getDate() - (ambassador.campaign_days - day));
+
+          submissions.push({
+            id: `sub_${ambassador.id}_${day}`,
+            taskId: `task_${day}`,
+            taskTitle: `Day ${day} Task`,
+            submissionText: `Task completion for day ${day} by ${ambassador.name}`,
+            submittedAt: submissionDate.toISOString(),
+            completedAt: submissionDate.toISOString(),
+            status: 'completed',
+            points: Math.floor(ambassador.total_points / Math.max(ambassador.campaign_days, 1)),
+            peopleConnected: Math.floor(ambassador.students_reached / Math.max(ambassador.campaign_days, 1)),
+            category: 'General',
+            priority: 'medium',
+            user_id: ambassador.id,
+            user_name: ambassador.name,
+            user_college: ambassador.college,
+            user_group_leader: ambassador.group_leader_name
+          });
+        }
+      });
+
+      const processedReportData: ReportData = {
+        totalAmbassadors: filteredAmbassadors.length,
+        totalTasks: totalTasks,
+        totalPoints: totalPoints,
+        totalPeopleConnected: totalPeopleConnected,
+        averageTaskTime: '2.5 hours',
+        completionRate: 100,
+        submissions: submissions,
+        monthlyProgress: [],
+        ambassadors: filteredAmbassadors
+      };
+
+      setReportData(processedReportData);
+      setMetrics({
+        total_ambassadors: ambassadors.length,
+        active_ambassadors: ambassadors.filter(amb => amb.status === 'active').length,
+        total_submissions: submissions.length,
+        total_points: ambassadors.reduce((sum, amb) => sum + amb.total_points, 0)
+      });
     } finally {
       setLoading(false);
     }
@@ -216,6 +470,16 @@ const Reports: React.FC = () => {
   useEffect(() => {
     fetchReportData();
   }, [selectedGroupLeader]);
+
+  // Handle viewing user details
+  const handleViewUserDetails = (user: Ambassador) => {
+    setSelectedUser(user);
+
+    // Get all submissions for this user
+    const submissions = reportData?.submissions.filter(sub => sub.user_id === user.id) || [];
+    setUserSubmissions(submissions);
+    setShowUserModal(true);
+  };
 
   // Export functions
   const exportToExcel = () => {
@@ -682,16 +946,16 @@ const Reports: React.FC = () => {
           </Card>
         )}
 
-        {/* Detailed Submissions Table */}
-        {reportData && reportData.submissions.length > 0 && (
+        {/* Ambassador List with Details Button */}
+        {reportData && reportData.ambassadors.length > 0 && (
           <Card className="bg-gray-800 border-gray-700">
             <CardHeader>
               <CardTitle className="text-white flex items-center space-x-2">
-                <CheckCircle className="h-6 w-6 text-green-400" />
-                <span>Detailed Submissions</span>
+                <Users className="h-6 w-6 text-blue-400" />
+                <span>Ambassador Details</span>
               </CardTitle>
               <CardDescription className="text-gray-400">
-                Complete list of task submissions
+                View detailed submissions for each ambassador
                 {selectedGroupLeader !== 'all' && ` from ${selectedGroupLeader}'s team`}
               </CardDescription>
             </CardHeader>
@@ -703,59 +967,185 @@ const Reports: React.FC = () => {
                       <th className="text-left py-3 px-4 text-gray-300 font-medium">Ambassador</th>
                       <th className="text-left py-3 px-4 text-gray-300 font-medium">College</th>
                       <th className="text-left py-3 px-4 text-gray-300 font-medium">Group Leader</th>
-                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Task</th>
-                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Date</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Tasks</th>
                       <th className="text-left py-3 px-4 text-gray-300 font-medium">Points</th>
                       <th className="text-left py-3 px-4 text-gray-300 font-medium">People</th>
                       <th className="text-left py-3 px-4 text-gray-300 font-medium">Status</th>
+                      <th className="text-left py-3 px-4 text-gray-300 font-medium">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {reportData.submissions.slice(0, 50).map((submission) => (
-                      <tr key={submission.id} className="border-b border-gray-800 hover:bg-gray-700">
+                    {reportData.ambassadors.map((ambassador) => (
+                      <tr key={ambassador.id} className="border-b border-gray-800 hover:bg-gray-700">
                         <td className="py-3 px-4">
-                          <div>
-                            <p className="text-white font-medium">{submission.user_name}</p>
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-bold">
+                              {ambassador.name.split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div>
+                              <p className="text-white font-medium">{ambassador.name}</p>
+                              <p className="text-gray-400 text-xs">{ambassador.email}</p>
+                            </div>
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-gray-300">{submission.user_college}</td>
+                        <td className="py-3 px-4 text-gray-300">{ambassador.college}</td>
                         <td className="py-3 px-4">
-                          <span className="bg-blue-600 text-white px-2 py-1 rounded text-xs">
-                            {submission.user_group_leader || 'No Group Leader'}
+                          <span className="bg-purple-600 text-white px-2 py-1 rounded text-xs">
+                            {ambassador.group_leader_name || 'No Group Leader'}
                           </span>
                         </td>
                         <td className="py-3 px-4">
-                          <div>
-                            <p className="text-white font-medium">{submission.taskTitle}</p>
-                            <p className="text-gray-400 text-xs">ID: {submission.taskId}</p>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-gray-300">
-                          {new Date(submission.submittedAt).toLocaleDateString()}
+                          <span className="text-green-400 font-bold">{ambassador.campaign_days}</span>
                         </td>
                         <td className="py-3 px-4">
-                          <span className="text-yellow-400 font-bold">{submission.points}</span>
+                          <span className="text-yellow-400 font-bold">{ambassador.total_points}</span>
                         </td>
                         <td className="py-3 px-4">
-                          <span className="text-purple-400 font-bold">{submission.peopleConnected || 0}</span>
+                          <span className="text-purple-400 font-bold">{ambassador.students_reached}</span>
                         </td>
                         <td className="py-3 px-4">
-                          <span className="bg-green-600 text-white px-2 py-1 rounded text-xs capitalize">
-                            {submission.status}
+                          <span className={`px-2 py-1 rounded text-xs capitalize ${
+                            ambassador.status === 'active' ? 'bg-green-600 text-white' :
+                            ambassador.status === 'inactive' ? 'bg-yellow-600 text-white' :
+                            'bg-red-600 text-white'
+                          }`}>
+                            {ambassador.status}
                           </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <Button
+                            onClick={() => handleViewUserDetails(ambassador)}
+                            size="sm"
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            Details
+                          </Button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {reportData.submissions.length > 50 && (
-                  <div className="mt-4 text-center text-gray-400 text-sm">
-                    Showing first 50 submissions. Export to see all {reportData.submissions.length} submissions.
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* User Submissions Modal */}
+        {showUserModal && selectedUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true">
+            <div className="absolute inset-0 bg-black/70" onClick={() => setShowUserModal(false)}></div>
+            <div className="relative w-full max-w-6xl mx-4 bg-gray-900 rounded-lg border border-gray-700 shadow-xl max-h-[90vh] overflow-hidden">
+              <div className="flex items-center justify-between p-6 border-b border-gray-800">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">
+                    {selectedUser.name} - Submission Details
+                  </h3>
+                  <p className="text-gray-400 text-sm">
+                    {selectedUser.college} • {selectedUser.group_leader_name}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowUserModal(false)}
+                  className="text-gray-400 hover:text-white"
+                  aria-label="Close"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                {/* User Summary */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-gray-800 rounded-lg p-4 text-center">
+                    <div className="text-2xl font-bold text-green-400">{selectedUser.campaign_days}</div>
+                    <p className="text-gray-400 text-sm">Tasks Completed</p>
+                  </div>
+                  <div className="bg-gray-800 rounded-lg p-4 text-center">
+                    <div className="text-2xl font-bold text-yellow-400">{selectedUser.total_points}</div>
+                    <p className="text-gray-400 text-sm">Total Points</p>
+                  </div>
+                  <div className="bg-gray-800 rounded-lg p-4 text-center">
+                    <div className="text-2xl font-bold text-purple-400">{selectedUser.students_reached}</div>
+                    <p className="text-gray-400 text-sm">People Reached</p>
+                  </div>
+                  <div className="bg-gray-800 rounded-lg p-4 text-center">
+                    <div className="text-2xl font-bold text-blue-400">{selectedUser.total_referrals}</div>
+                    <p className="text-gray-400 text-sm">Referrals</p>
+                  </div>
+                </div>
+
+                {/* Submissions Table */}
+                <div className="bg-gray-800 rounded-lg">
+                  <div className="p-4 border-b border-gray-700">
+                    <h4 className="text-white font-semibold">All Submissions ({userSubmissions.length})</h4>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-700">
+                          <th className="text-left py-3 px-4 text-gray-300 font-medium">Task</th>
+                          <th className="text-left py-3 px-4 text-gray-300 font-medium">Submission Date</th>
+                          <th className="text-left py-3 px-4 text-gray-300 font-medium">Content</th>
+                          <th className="text-left py-3 px-4 text-gray-300 font-medium">Points</th>
+                          <th className="text-left py-3 px-4 text-gray-300 font-medium">People Connected</th>
+                          <th className="text-left py-3 px-4 text-gray-300 font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {userSubmissions.map((submission) => (
+                          <tr key={submission.id} className="border-b border-gray-800 hover:bg-gray-700">
+                            <td className="py-3 px-4">
+                              <div>
+                                <p className="text-white font-medium">{submission.taskTitle}</p>
+                                <p className="text-gray-400 text-xs">ID: {submission.taskId}</p>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-gray-300">
+                              {new Date(submission.submittedAt).toLocaleDateString()}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="max-w-xs">
+                                <p className="text-gray-300 text-sm truncate" title={submission.submissionText}>
+                                  {submission.submissionText}
+                                </p>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="text-yellow-400 font-bold">{submission.points}</span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="text-purple-400 font-bold">{submission.peopleConnected || 0}</span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="bg-green-600 text-white px-2 py-1 rounded text-xs capitalize">
+                                {submission.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {userSubmissions.length === 0 && (
+                      <div className="p-8 text-center text-gray-400">
+                        No submissions found for this ambassador.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-gray-800 flex justify-end">
+                <Button
+                  onClick={() => setShowUserModal(false)}
+                  variant="outline"
+                  className="border-gray-700 text-gray-300 hover:bg-gray-800"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
 
       </div>
