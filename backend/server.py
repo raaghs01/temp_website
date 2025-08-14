@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form, Depends, Body
+from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form, Depends, Body, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -19,7 +19,16 @@ import hashlib
 import base64
 from io import BytesIO
 from contextlib import asynccontextmanager
+import traceback
+from fastapi.responses import JSONResponse
 
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 ROOT_DIR = Path(__file__).parent
@@ -40,6 +49,31 @@ async def lifespan(app: FastAPI):
     # Shutdown (if needed)
 
 app = FastAPI(lifespan=lifespan)
+
+# Global exception handler for debugging
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    # Log a full traceback to the console
+    logger.error("Unhandled exception occurred handling request %s %s", request.method, request.url)
+    traceback.print_exc()
+
+    # Return safe JSON (the CORS middleware will still attach CORS headers)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
+
+# Add CORS middleware FIRST, before any routers
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
+)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -511,34 +545,53 @@ async def get_my_submissions(current_user: User = Depends(get_current_user), db:
     submissions = await db_service.get_user_submissions(current_user.id)
     return submissions
 
+# @api_router.post("/submit-task-with-files")
+# async def submit_task_with_files(
+#     task_id: str = Form(...),
+#     status_text: str = Form(...),
+#     people_connected: int = Form(0),
+#     files: List[UploadFile] = File(...),
+#     current_user: User = Depends(get_current_user),
+#     db: AsyncSession = Depends(get_db)
+# ):
+#     db_service = DatabaseService(db)
 @api_router.post("/submit-task-with-files")
 async def submit_task_with_files(
     task_id: str = Form(...),
-    status_text: str = Form(...),
+    status_text: str = Form(""),
     people_connected: int = Form(0),
     files: List[UploadFile] = File(...),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     db_service = DatabaseService(db)
 
-    # Get the task to validate
+    # 1) Validate task
     task = await db_service.get_task_by_id(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    # Calculate points (base + bonus for people connected)
+    # 2) Save files locally (adjust path as you like)
+    upload_dir = Path("uploads")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    saved_filenames: List[str] = []
+    try:
+        for f in files:
+            if not f.filename:
+                continue
+            dest = upload_dir / f.filename
+            content = await f.read()
+            dest.write_bytes(content)
+            saved_filenames.append(f.filename)
+    except Exception as e:
+        # Surface a 400 instead of a 500 so you see the real issue in the client
+        raise HTTPException(status_code=400, detail=f"Failed to save files: {e}")
+
+    # 3) Compute points
     points_earned = task.points_reward + (people_connected * 10)
 
-    # Check if already submitted
-    existing_submission = await db_service.get_submission_by_user_and_task(current_user.id, task_id)
-
-    # Handle file uploads (for now, we'll just store file names)
-    file_names = []
-    for file in files:
-        if file.filename:
-            file_names.append(file.filename)
-
+    # 4) Build the submission payload ONLY with columns your model has
     submission_data = {
         "user_id": current_user.id,
         "task_id": task_id,
@@ -548,36 +601,37 @@ async def submit_task_with_files(
         "points_earned": points_earned,
         "is_completed": True,
         "submission_date": datetime.utcnow(),
-        "file_urls": ",".join(file_names) if file_names else None  # Store file names as comma-separated string
+        # If your Submission model has a column for filenames, use the correct name here:
+        # e.g. "file_names": ",".join(saved_filenames)
     }
 
-    if existing_submission:
-        # Update existing submission
-        old_points = existing_submission.points_earned
-        point_difference = points_earned - old_points
+    # 5) Upsert submission
+    existing = await db_service.get_submission_by_user_and_task(current_user.id, task_id)
 
-        await db_service.update_submission(existing_submission.id, submission_data)
+    if existing:
+        old_points = existing.points_earned
+        point_diff = points_earned - old_points
 
-        # Update user points and referrals
+        await db_service.update_submission(existing.id, submission_data)
         await db_service.update_user_points(
             current_user.id,
-            point_difference,
-            people_connected - existing_submission.people_connected
+            point_diff,
+            people_connected - existing.people_connected
         )
     else:
-        # Create new submission
         submission_data["id"] = str(uuid.uuid4())
         await db_service.create_submission(submission_data)
-
-        # Update user points and referrals
         await db_service.update_user_points(current_user.id, points_earned, people_connected)
 
-    # Update user's current day if this was their current task
+    # 6) Advance current day if needed
     if task.day == current_user.current_day:
         await db_service.update_user_current_day(current_user.id, current_user.current_day + 1)
 
-    return {"message": "Task submitted successfully", "points_earned": points_earned}
-
+    return {
+        "message": "Task submitted successfully",
+        "points_earned": points_earned,
+        "saved_files": saved_filenames,
+    }
 @api_router.post("/change-password")
 async def change_password(
     data: ChangePasswordRequest,
@@ -603,24 +657,8 @@ async def change_password(
 #     await init_db()
 #     await initialize_tasks()
 
-# Add CORS middleware BEFORE including routers
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:5000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Include the router in the main app
+# Include the router in the main app (move this AFTER CORS middleware)
 app.include_router(api_router)
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
     import uvicorn

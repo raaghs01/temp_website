@@ -207,19 +207,17 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
           return;
         }
 
-        // Fetch tasks
+        // Fetch tasks - Remove Content-Type header for GET requests
         const tasksResponse = await fetch(`${BACKEND_URL}/api/tasks`, {
           headers: {
             'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
           },
         });
 
-        // Fetch submissions
+        // Fetch submissions - Remove Content-Type header for GET requests
         const submissionsResponse = await fetch(`${BACKEND_URL}/api/my-submissions`, {
           headers: {
             'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
           },
         });
 
@@ -373,7 +371,33 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
     const files = e.target.files;
     if (files) {
       const fileArray = Array.from(files);
-      setSubmissionFiles(prev => [...prev, ...fileArray]);
+      const maxFiles = 5;
+      const maxSizePerFile = 8 * 1024 * 1024; // 8MB
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+
+      // Check if adding these files would exceed the limit
+      if (submissionFiles.length + fileArray.length > maxFiles) {
+        alert(`Maximum ${maxFiles} files allowed. You currently have ${submissionFiles.length} files.`);
+        return;
+      }
+
+      // Validate each file
+      const validFiles: File[] = [];
+      for (const file of fileArray) {
+        if (file.size > maxSizePerFile) {
+          alert(`File "${file.name}" is too large. Maximum size is 8MB per file.`);
+          continue;
+        }
+        if (!allowedTypes.includes(file.type)) {
+          alert(`File "${file.name}" has unsupported type. Only images and PDFs are allowed.`);
+          continue;
+        }
+        validFiles.push(file);
+      }
+
+      if (validFiles.length > 0) {
+        setSubmissionFiles(prev => [...prev, ...validFiles]);
+      }
     }
   };
 
@@ -392,7 +416,26 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
       return;
     }
 
-    // No need to warn about multiple files anymore - backend supports them!
+    // Client-side validation
+    const maxFiles = 5;
+    const maxSizePerFile = 8 * 1024 * 1024; // 8MB
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+
+    if (submissionFiles.length > maxFiles) {
+      alert(`Maximum ${maxFiles} files allowed.`);
+      return;
+    }
+
+    for (const file of submissionFiles) {
+      if (file.size > maxSizePerFile) {
+        alert(`File "${file.name}" is too large. Maximum size is 8MB per file.`);
+        return;
+      }
+      if (!allowedTypes.includes(file.type)) {
+        alert(`File "${file.name}" has unsupported type. Only images and PDFs are allowed.`);
+        return;
+      }
+    }
 
     setSubmitting(true);
     try {
@@ -451,7 +494,6 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
           imageUrl: submissionFiles.length > 0 ? URL.createObjectURL(submissionFiles[0]) : undefined,
           proofFiles: proofFiles,
           submittedAt: completionTime,
-          // completedAt: completionTime,
           status: 'completed',
           points: result.points_earned || selectedTask.points,
           peopleConnected: peopleConnected
@@ -471,11 +513,21 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
         setViewMode('list');
         setViewingTask(null);
 
-        const filesText = result.files_uploaded ? ` with ${result.files_uploaded} file${result.files_uploaded > 1 ? 's' : ''}` : '';
+        // Handle different possible response field names
+        const filesCount = result.saved_files?.length || result.files_uploaded || submissionFiles.length;
+        const filesText = filesCount > 1 ? ` with ${filesCount} files` : ' with 1 file';
         alert(`Task submitted successfully${filesText}! You earned ${result.points_earned || selectedTask.points} points.`);
       } else {
-        const errorData = await response.json();
-        alert(`Error submitting task: ${errorData.detail || 'Please try again.'}`);
+        // Handle non-JSON error responses gracefully
+        let errorMessage = 'Please try again.';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorMessage;
+        } catch {
+          // If response is not JSON, use status text
+          errorMessage = response.statusText || errorMessage;
+        }
+        alert(`Error submitting task: ${errorMessage}`);
       }
     } catch (error) {
       console.error('Error submitting task:', error);
@@ -898,7 +950,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
 
                             <div>
                               <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Upload Files (Required) *
+                                Upload Files (Required) * <span className="text-xs text-gray-400">(Max 5 files, 8MB each)</span>
                               </label>
                               <div className="border-2 border-dashed border-gray-500 rounded-lg p-4 text-center">
                                 <input
@@ -914,16 +966,26 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                                   <p className="text-gray-400 text-sm">
                                     Click to upload files (Images & PDFs)
                                   </p>
+                                  <p className="text-gray-500 text-xs mt-1">
+                                    Max 5 files, 8MB each
+                                  </p>
                                 </label>
                               </div>
 
                               {/* Display uploaded files */}
                               {submissionFiles.length > 0 && (
                                 <div className="mt-3 space-y-2">
-                                  <p className="text-sm text-gray-300">Uploaded files:</p>
+                                  <p className="text-sm text-gray-300">
+                                    Uploaded files ({submissionFiles.length}/5):
+                                  </p>
                                   {submissionFiles.map((file, index) => (
                                     <div key={index} className="flex items-center justify-between bg-gray-600 rounded p-2">
-                                      <span className="text-sm text-gray-300">{file.name}</span>
+                                      <div className="flex items-center space-x-2">
+                                        <span className="text-sm text-gray-300">{file.name}</span>
+                                        <span className="text-xs text-gray-400">
+                                          ({(file.size / 1024 / 1024).toFixed(1)} MB)
+                                        </span>
+                                      </div>
                                       <button
                                         type="button"
                                         onClick={() => removeFile(index)}
