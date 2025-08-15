@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle, Clock, FileText, Image as ImageIcon, Send, Star, Lock, Users, ArrowLeft, Download, X, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { CheckCircle, Clock, FileText, Image as ImageIcon, Send, Star, Lock, Users, ArrowLeft, Download, X, ChevronLeft, ChevronRight, Eye, Sun, Moon } from 'lucide-react';
 import { useTheme } from '@/App';
 
 const BACKEND_URL = 'http://127.0.0.1:5000';
@@ -13,7 +13,7 @@ interface Task {
   description: string;
   points: number;
   deadline?: string;
-  status: 'available' | 'completed' | 'locked';
+  status: 'available' | 'completed';
   day: number;
 }
 
@@ -29,7 +29,7 @@ interface Submission {
 }
 
 const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser }) => {
-  const { theme } = useTheme();
+  const { theme, toggleTheme } = useTheme();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -39,7 +39,6 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showSubmissionModal, setShowSubmissionModal] = useState(false);
-  const [showOrientationVideo, setShowOrientationVideo] = useState(false);
   const [stats, setStats] = useState({
     total_tasks_completed: 0,
     total_available_tasks: 0,
@@ -56,24 +55,20 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
         return;
       }
 
-      console.log('Fetching tasks...');
-
-      // Fetch ALL tasks (available + completed + locked)
-      const allTasksResponse = await fetch(`${BACKEND_URL}/api/all-tasks`, {
+      // Fetch tasks available for current user
+      const tasksResponse = await fetch(`${BACKEND_URL}/api/tasks`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
 
-      if (!allTasksResponse.ok) {
-        throw new Error(`Failed to fetch all tasks: ${allTasksResponse.status}`);
+      if (!tasksResponse.ok) {
+        throw new Error('Failed to fetch tasks');
       }
 
-      const allTasksData = await allTasksResponse.json();
-      console.log('All tasks data:', allTasksData);
-      
-      setTasks(allTasksData);
+      const tasksData = await tasksResponse.json();
+      setTasks(tasksData);
 
       // Fetch dashboard stats
       const statsResponse = await fetch(`${BACKEND_URL}/api/dashboard-stats`, {
@@ -90,7 +85,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
           total_available_tasks: statsData.total_available_tasks || 0,
           success_rate: statsData.completion_percentage || 0,
           current_day: statsData.current_day || 1,
-          days_since_registration: statsData.current_day || 1 // Use current_day for consistency
+          days_since_registration: statsData.days_since_registration || 1
         });
       }
 
@@ -121,12 +116,10 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
   // Group tasks by status and day
   const availableTasks = tasks.filter(task => task.status === 'available');
   const completedTasks = tasks.filter(task => task.status === 'completed');
-  const lockedTasks = tasks.filter(task => task.status === 'locked');
 
   // Sort tasks by day
   const sortedAvailableTasks = availableTasks.sort((a, b) => a.day - b.day);
   const sortedCompletedTasks = completedTasks.sort((a, b) => a.day - b.day);
-  const sortedLockedTasks = lockedTasks.sort((a, b) => a.day - b.day);
 
   const getDayLabel = (day: number) => {
     if (day === 0) return 'Orientation';
@@ -265,6 +258,17 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
               Complete tasks to earn points and climb the leaderboard
             </p>
           </div>
+          <button
+            onClick={toggleTheme}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg border ${
+              theme === 'dark' 
+                ? 'border-gray-600 bg-gray-700 text-white hover:bg-gray-600' 
+                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+            } transition-colors`}
+          >
+            {theme === 'dark' ? <Sun className="h-4 w-4 text-yellow-400" /> : <Moon className="h-4 w-4 text-blue-500" />}
+            <span className="text-sm">{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+          </button>
         </div>
 
         {/* Stats Cards */}
@@ -325,7 +329,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
         <div className={`p-4 rounded-lg mb-6 ${theme === 'dark' ? 'bg-blue-900/20 border border-blue-800' : 'bg-blue-50 border border-blue-200'}`}>
           <p className={`text-sm ${theme === 'dark' ? 'text-blue-300' : 'text-blue-700'}`}>
             📅 You are currently on <strong>Day {stats.current_day}</strong> of your ambassador journey 
-            ({stats.current_day} days since registration)
+            ({stats.days_since_registration} days since registration)
           </p>
         </div>
 
@@ -342,7 +346,6 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                   task={task} 
                   theme={theme}
                   onTaskClick={setSelectedTask}
-                  onOrientationClick={() => setShowOrientationVideo(true)}
                   dayLabel={getDayLabel(task.day)}
                 />
               ))}
@@ -352,7 +355,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
 
         {/* Completed Tasks */}
         {sortedCompletedTasks.length > 0 && (
-          <div className="mb-8">
+          <div>
             <div className={`inline-flex items-center px-4 py-2 rounded-lg mb-4 ${theme === 'dark' ? 'bg-green-900' : 'bg-green-500'}`}>
               <span className="text-white font-semibold">Completed Tasks ({sortedCompletedTasks.length})</span>
             </div>
@@ -363,7 +366,6 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
                   task={task} 
                   theme={theme}
                   onTaskClick={setSelectedTask}
-                  onOrientationClick={() => setShowOrientationVideo(true)}
                   dayLabel={getDayLabel(task.day)}
                 />
               ))}
@@ -371,52 +373,14 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
           </div>
         )}
 
-        {/* Locked Tasks */}
-        {sortedLockedTasks.length > 0 && (
-          <div className="mb-8">
-            <div className={`inline-flex items-center px-4 py-2 rounded-lg mb-4 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-500'}`}>
-              <span className="text-white font-semibold">Locked Tasks ({sortedLockedTasks.length})</span>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {sortedLockedTasks.map((task) => (
-                <TaskCard 
-                  key={task.id} 
-                  task={task} 
-                  theme={theme}
-                  onTaskClick={() => {}} // Locked tasks can't be clicked
-                  onOrientationClick={() => {}} // Locked tasks can't be clicked
-                  dayLabel={getDayLabel(task.day)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {sortedAvailableTasks.length === 0 && sortedCompletedTasks.length === 0 && sortedLockedTasks.length === 0 && (
+        {sortedAvailableTasks.length === 0 && sortedCompletedTasks.length === 0 && (
           <div className={`text-center py-12 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
             <span className="text-4xl mb-4 block">📋</span>
-            <p className="text-lg">No tasks found.</p>
+            <p className="text-lg">No tasks available at the moment.</p>
             <p>Check back later for new assignments!</p>
           </div>
         )}
       </div>
-
-      {/* Orientation Video Modal */}
-      {showOrientationVideo && (
-        <OrientationVideoModal
-          isOpen={showOrientationVideo}
-          onClose={() => setShowOrientationVideo(false)}
-          onComplete={() => {
-            setShowOrientationVideo(false);
-            // Find the orientation task and set it as selected for submission
-            const orientationTask = tasks.find(t => t.title === 'Complete Orientation' && t.status === 'available');
-            if (orientationTask) {
-              setSelectedTask(orientationTask);
-            }
-          }}
-          theme={theme}
-        />
-      )}
 
       {/* Task Submission Modal */}
       {selectedTask && (
@@ -452,69 +416,37 @@ const TaskCard: React.FC<{
   task: Task, 
   theme: string, 
   onTaskClick: (task: Task) => void, 
-  onOrientationClick: () => void,
   dayLabel: string 
-}> = ({ task, theme, onTaskClick, onOrientationClick, dayLabel }) => {
+}> = ({ task, theme, onTaskClick, dayLabel }) => {
   const handleClick = () => {
     if (task.status === 'available') {
-      if (task.title === 'Complete Orientation') {
-        onOrientationClick();
-      } else {
-        onTaskClick(task);
-      }
+      onTaskClick(task);
     }
   };
-
-  const getStatusDisplay = () => {
-    switch (task.status) {
-      case 'completed':
-        return { text: '✓ Completed', bgColor: 'bg-green-100 text-green-800', cardBg: 'bg-green-50' };
-      case 'available':
-        return { text: 'Available', bgColor: 'bg-blue-100 text-blue-800', cardBg: '' };
-      case 'locked':
-        return { text: '🔒 Locked', bgColor: 'bg-gray-100 text-gray-600', cardBg: 'bg-gray-50' };
-      default:
-        return { text: 'Unknown', bgColor: 'bg-gray-100 text-gray-600', cardBg: 'bg-gray-50' };
-    }
-  };
-
-  const getStatusIcon = () => {
-    switch (task.status) {
-      case 'completed':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case 'available':
-        return <Clock className="h-4 w-4 text-blue-500" />;
-      case 'locked':
-        return <Lock className="h-4 w-4 text-gray-400" />;
-      default:
-        return <Clock className="h-4 w-4 text-gray-400" />;
-    }
-  };
-
-  const statusDisplay = getStatusDisplay();
 
   return (
     <div 
       onClick={handleClick} 
-      className={`p-4 rounded-lg transition-all border
-        ${theme === 'dark' ? 'bg-gray-800' : `bg-white ${statusDisplay.cardBg}`} 
+      className={`p-4 rounded-lg transition-all 
+        ${theme === 'dark' ? 'bg-gray-800' : 'bg-white'} 
         shadow-md hover:shadow-lg
-        ${task.status === 'available' ? 'cursor-pointer border-blue-200' : task.status === 'locked' ? 'opacity-60 border-gray-200' : 'border-green-200'}
-        ${task.status === 'completed' ? 'bg-green-50' : ''}
+        ${task.status === 'available' ? 'cursor-pointer' : 'opacity-75'}
       `}
     >
       <div className="flex items-center justify-between mb-2">
         <div className="text-sm text-gray-500">
           {dayLabel}
         </div>
-        <div className={`text-xs rounded-full px-3 py-1 font-semibold ${statusDisplay.bgColor}`}>
-          {statusDisplay.text}
+        <div className={`text-xs rounded-full px-3 py-1 font-semibold 
+          ${task.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}
+        `}>
+          {task.status === 'completed' ? '✓ Completed' : 'Available'}
         </div>
       </div>
-      <div className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'} ${task.status === 'locked' ? 'text-gray-500' : ''}`}>
+      <div className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
         {task.title}
       </div>
-      <div className={`text-sm mb-4 line-clamp-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'} ${task.status === 'locked' ? 'text-gray-400' : ''}`}>
+      <div className={`text-sm mb-4 line-clamp-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
         {task.description}
       </div>
       <div className="flex items-center justify-between text-sm text-gray-500">
@@ -522,7 +454,11 @@ const TaskCard: React.FC<{
           💰 {task.points} points
         </div>
         <div className="flex items-center">
-          {getStatusIcon()}
+          {task.status === 'completed' ? (
+            <CheckCircle className="h-4 w-4 text-green-500" />
+          ) : (
+            <Clock className="h-4 w-4 text-blue-500" />
+          )}
         </div>
       </div>
     </div>
@@ -660,79 +596,6 @@ const TaskSubmissionModal: React.FC<{
             </Button>
           </div>
         </form>
-      </div>
-    </div>
-  );
-};
-
-// Modal component for orientation video
-const OrientationVideoModal: React.FC<{
-  isOpen: boolean;
-  onClose: () => void;
-  onComplete: () => void;
-  theme: string;
-}> = ({ isOpen, onClose, onComplete, theme }) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className={`w-full max-w-4xl max-h-[90vh] overflow-auto p-6 rounded-xl shadow-lg ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'}`}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold">DC Studios Orientation</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        
-        <div className="mb-6">
-          <div className={`aspect-video bg-gray-200 rounded-lg flex items-center justify-center mb-4 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'}`}>
-            <div className="text-center">
-              <div className="text-4xl mb-2">📹</div>
-              <p className={`${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'}`}>
-                Orientation Video Placeholder
-              </p>
-              <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                (Video will be embedded here)
-              </p>
-            </div>
-          </div>
-          
-          <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-50'}`}>
-            <h4 className="font-semibold mb-2">Welcome to DC Studios Ambassador Program!</h4>
-            <div className="space-y-2 text-sm">
-              <p>🎯 <strong>Mission:</strong> Connect with students and promote DC Studios services</p>
-              <p>🌟 <strong>Goal:</strong> Build awareness about our tech solutions and internship opportunities</p>
-              <p>📈 <strong>Growth:</strong> Develop your leadership and communication skills</p>
-              <p>🤝 <strong>Community:</strong> Join a network of passionate student ambassadors</p>
-            </div>
-          </div>
-          
-          <div className={`mt-4 p-4 rounded-lg ${theme === 'dark' ? 'bg-blue-900/20 border border-blue-800' : 'bg-blue-50 border border-blue-200'}`}>
-            <h4 className="font-semibold mb-2">Key Documents to Review:</h4>
-            <ul className={`text-sm space-y-1 ${theme === 'dark' ? 'text-blue-300' : 'text-blue-700'}`}>
-              <li>• Ambassador Guidelines and Best Practices</li>
-              <li>• DC Studios Service Portfolio</li>
-              <li>• Communication Templates and Resources</li>
-              <li>• Code of Conduct and Policies</li>
-            </ul>
-          </div>
-        </div>
-        
-        <div className="flex gap-4">
-          <Button
-            onClick={onClose}
-            variant="outline"
-            className="flex-1"
-          >
-            Close
-          </Button>
-          <Button
-            onClick={onComplete}
-            className="flex-1"
-          >
-            Complete Orientation & Submit Task
-          </Button>
-        </div>
       </div>
     </div>
   );

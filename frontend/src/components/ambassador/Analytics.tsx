@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { BarChart3, TrendingUp, Target, Activity, Users, Award, Calendar, PieChart, LineChart, Zap } from 'lucide-react';
+import { BarChart3, TrendingUp, Target, Activity, Users, Award, Calendar, PieChart, LineChart, Zap, Sun, Moon } from 'lucide-react';
+import { useTheme } from '@/App';
 
 const Analytics: React.FC = () => {
   return (

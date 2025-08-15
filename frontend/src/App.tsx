@@ -241,7 +241,7 @@ const LoginForm: React.FC = () => {
       
       const response = await axios.post<{ token: string; user: User }>(fullUrl, requestData);
 
-      login(response.data.token, response.data.user, !isLogin);
+      login(response.data.token, response.data.user);
       setSuccess(isLogin ? 'Login successful!' : 'Account created successfully!');
     } catch (error: any) {
       const errorMessage = error.response?.data?.detail || 

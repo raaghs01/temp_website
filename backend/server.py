@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from db import get_db, init_db, AsyncSessionLocal
 from services.database_service import DatabaseService
 from models import User, Task, Submission
@@ -21,12 +22,14 @@ from contextlib import asynccontextmanager
 import traceback
 from fastapi.responses import JSONResponse
 
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
 # Load environment variables
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -112,12 +115,10 @@ class UserProfile(BaseModel):
     status: str
 
 class LeaderboardEntry(BaseModel):
-    id: str
     name: str
     college: str
-    group_leader_name: str
     total_points: int
-    tasks_completed: int
+    total_referrals: int
     rank: int
 
 class UserStatusUpdateRequest(BaseModel):
@@ -128,27 +129,11 @@ class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
 
-class ProfileUpdateRequest(BaseModel):
+class ProfileUpdate(BaseModel):
     name: str
     email: str
     college: str
     group_leader_name: str
-
-class DetailedSubmission(BaseModel):
-    id: str
-    task_id: str
-    task_title: str
-    task_day: int
-    user_id: str
-    user_name: str
-    user_email: str
-    user_college: str
-    group_leader_name: str
-    status_text: str
-    people_connected: int
-    points_earned: int
-    submission_date: datetime
-    is_completed: bool
 
 # Utility functions
 def hash_password(password: str) -> str:
@@ -200,6 +185,56 @@ async def calculate_user_rank(user_id: str, db: AsyncSession) -> int:
             return i + 1
     
     return len(leaderboard) + 1
+
+def get_current_day_from_registration(registration_date: datetime) -> int:
+    """Calculate current day based on registration date"""
+    now = datetime.utcnow()
+    days_passed = (now - registration_date).days
+    return max(1, days_passed + 1)  # Day 1 starts immediately after registration
+
+async def get_available_tasks_for_user(user: User, db: AsyncSession) -> List[dict]:
+    """Get available tasks based on user's current day and completion status"""
+    db_service = DatabaseService(db)
+    
+    # Calculate current day based on registration date
+    current_day = get_current_day_from_registration(user.registration_date)
+    
+    # Get all tasks
+    all_tasks = await db_service.get_all_active_tasks()
+    
+    # Get user's completed tasks
+    user_submissions = await db_service.get_user_submissions(user.id)
+    completed_task_ids = {sub.task_id for sub in user_submissions if sub.is_completed}
+    
+    available_tasks = []
+    
+    for task in all_tasks:
+        # Task availability logic based on your requirements
+        is_available = False
+        
+        if current_day == 1:
+            # Day 1: User gets day 0 (orientation), day 1, and day 2 tasks
+            if task.day in [0, 1, 2]:
+                is_available = True
+        else:
+            # Day 2+: User gets ONLY current day task and next day task
+            # NO incomplete previous tasks - they get locked forever if missed
+            if task.day in [current_day, current_day + 1]:
+                is_available = True
+        
+        if is_available:
+            task_dict = {
+                "id": task.id,
+                "title": task.title,
+                "description": task.description,
+                "points": task.points_reward,
+                "day": task.day,
+                "status": "completed" if task.id in completed_task_ids else "available",
+                "deadline": (user.registration_date + timedelta(days=task.day + 1)).isoformat() if task.day > 0 else None
+            }
+            available_tasks.append(task_dict)
+    
+    return sorted(available_tasks, key=lambda x: x["day"])
 
 # Initialize default tasks
 async def initialize_tasks():
@@ -394,6 +429,8 @@ async def login(login_data: UserLogin, db: AsyncSession = Depends(get_db)):
 async def get_profile(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     rank = await calculate_user_rank(current_user.id, db)
 
+
+
     return UserProfile(
         id=current_user.id,
         email=current_user.email,
@@ -411,76 +448,93 @@ async def get_profile(current_user: User = Depends(get_current_user), db: AsyncS
 
 @api_router.put("/profile")
 async def update_profile(
-    profile_data: ProfileUpdateRequest,
+    profile: ProfileUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    db_service = DatabaseService(db)
+    # Optional: validate email or fields before saving
+    if not profile.name.strip():
+        raise HTTPException(status_code=400, detail="Name cannot be empty")
 
-    # Check if email is being changed and if it's already taken by another user
-    if profile_data.email != current_user.email:
-        existing_user = await db_service.get_user_by_email(profile_data.email)
-        if existing_user and existing_user.id != current_user.id:
-            raise HTTPException(status_code=400, detail="Email already in use by another account")
+    # Fetch the latest user instance from DB
+    result = await db.execute(select(User).where(User.id == current_user.id))
+    user_obj = result.scalars().first()
 
-    # Update user profile
-    update_data = {
-        "name": profile_data.name,
-        "email": profile_data.email,
-        "college": profile_data.college,
-        "group_leader_name": profile_data.group_leader_name
+    if not user_obj:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Update fields
+    user_obj.name = profile.name
+    user_obj.email = profile.email
+    user_obj.college = profile.college
+    user_obj.group_leader_name = profile.group_leader_name
+
+    await db.commit()
+    await db.refresh(user_obj)
+
+    return {
+        "status": "success",
+        "message": "Profile updated successfully",
+        "data": {
+            "name": user_obj.name,
+            "email": user_obj.email,
+            "college": user_obj.college,
+            "group_leader_name": user_obj.group_leader_name
+        }
     }
-
-    await db_service.update_user_profile(current_user.id, update_data)
-
-    # Get updated user data
-    updated_user = await db_service.get_user_by_id(current_user.id)
-    rank = await calculate_user_rank(updated_user.id, db)
-
-    return UserProfile(
-        id=updated_user.id,
-        email=updated_user.email,
-        name=updated_user.name,
-        college=updated_user.college,
-        group_leader_name=updated_user.group_leader_name,
-        role=updated_user.role,
-        current_day=updated_user.current_day,
-        total_points=updated_user.total_points,
-        total_referrals=updated_user.total_referrals,
-        rank_position=rank,
-        registration_date=updated_user.registration_date,
-        status=updated_user.status
-    )
 
 @api_router.get("/tasks")
 async def get_tasks(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Get tasks available for the current user based on their registration day"""
+    return await get_available_tasks_for_user(current_user, db)
+
+@api_router.get("/all-tasks")
+async def get_all_tasks(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Get all tasks with their status (available, completed, locked) for the current user"""
     db_service = DatabaseService(db)
-    tasks = await db_service.get_all_active_tasks()
-    return tasks
+    
+    # Calculate current day based on registration date
+    current_day = get_current_day_from_registration(current_user.registration_date)
+    
+    # Get all tasks
+    all_tasks = await db_service.get_all_active_tasks()
+    
+    # Get user's completed tasks
+    user_submissions = await db_service.get_user_submissions(current_user.id)
+    completed_task_ids = {sub.task_id for sub in user_submissions if sub.is_completed}
+    
+    # Get available tasks
+    available_tasks = await get_available_tasks_for_user(current_user, db)
+    available_task_ids = {t["id"] for t in available_tasks}
+    
+    all_tasks_with_status = []
+    
+    for task in all_tasks:
+        # Determine status
+        if task.id in completed_task_ids:
+            status = "completed"
+        elif task.id in available_task_ids:
+            status = "available"
+        else:
+            status = "locked"
+        
+        task_dict = {
+            "id": task.id,
+            "title": task.title,
+            "description": task.description,
+            "points": task.points_reward,
+            "day": task.day,
+            "status": status,
+            "deadline": (current_user.registration_date + timedelta(days=task.day + 1)).isoformat() if task.day > 0 else None
+        }
+        all_tasks_with_status.append(task_dict)
+    
+    return sorted(all_tasks_with_status, key=lambda x: x["day"])
 
 @api_router.get("/leaderboard")
 async def get_leaderboard(limit: int = 10, db: AsyncSession = Depends(get_db)):
     db_service = DatabaseService(db)
-    users = await db_service.get_leaderboard(limit)
-
-    # Get task completion counts for each user
-    leaderboard_data = []
-    for i, user in enumerate(users):
-        # Get user's submissions to count completed tasks
-        submissions = await db_service.get_user_submissions(user.id)
-        tasks_completed = len(submissions)
-
-        leaderboard_data.append(LeaderboardEntry(
-            id=user.id,
-            name=user.name,
-            college=user.college,
-            group_leader_name=user.group_leader_name,
-            total_points=user.total_points,
-            tasks_completed=tasks_completed,
-            rank=i + 1
-        ))
-
-    return leaderboard_data
+    return await db_service.get_leaderboard(limit)
 
 @api_router.post("/submit-task")
 async def submit_task_text(
@@ -494,6 +548,13 @@ async def submit_task_text(
     task = await db_service.get_task_by_id(submission.task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Verify task is available for user
+    available_tasks = await get_available_tasks_for_user(current_user, db)
+    available_task_ids = {t["id"] for t in available_tasks}
+    
+    if submission.task_id not in available_task_ids:
+        raise HTTPException(status_code=400, detail="Task not available for your current day")
     
     # Calculate points (base + bonus for people connected)
     points_earned = task.points_reward + (submission.people_connected * 10)
@@ -533,33 +594,36 @@ async def submit_task_text(
         # Update user points and referrals
         await db_service.update_user_points(current_user.id, points_earned, submission.people_connected)
     
-    # Update user's current day if this was their current task
-    if task.day == current_user.current_day:
-        await db_service.update_user_current_day(current_user.id, current_user.current_day + 1)
-    
     return {"message": "Task submitted successfully", "points_earned": points_earned}
 
 @api_router.get("/dashboard-stats")
 async def get_dashboard_stats(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     db_service = DatabaseService(db)
     
+    # Calculate current day from registration
+    current_day = get_current_day_from_registration(current_user.registration_date)
+    
     # Get user's submissions
     submissions = await db_service.get_user_submissions(current_user.id)
+    completed_submissions = [s for s in submissions if s.is_completed]
     
     # Get updated user data
     user = await db_service.get_user_by_id(current_user.id)
     
-    total_tasks_completed = len(submissions)
-    current_day = user.current_day
+    total_tasks_completed = len(completed_submissions)
     
-    # Get next task
-    next_task = await db_service.get_task_by_day(current_day)
+    # Get available tasks for current day
+    available_tasks = await get_available_tasks_for_user(user, db)
+    total_available_tasks = len(available_tasks)
+    
+    # Get next incomplete task
+    incomplete_tasks = [t for t in available_tasks if t["status"] != "completed"]
+    next_task = min(incomplete_tasks, key=lambda x: x["day"]) if incomplete_tasks else None
     
     # Calculate rank
     rank = await calculate_user_rank(user.id, db)
     
-    # Calculate completion percentage
-    total_available_tasks = current_day + 1
+    # Calculate completion percentage based on available tasks
     completion_percentage = (total_tasks_completed / max(total_available_tasks, 1)) * 100
     
     return {
@@ -567,14 +631,11 @@ async def get_dashboard_stats(current_user: User = Depends(get_current_user), db
         "total_referrals": user.total_referrals,
         "current_day": current_day,
         "total_tasks_completed": total_tasks_completed,
+        "total_available_tasks": total_available_tasks,
         "rank": rank,
         "completion_percentage": round(completion_percentage, 1),
-        "next_task": {
-            "id": next_task.id if next_task else None,
-            "title": next_task.title if next_task else "No more tasks",
-            "description": next_task.description if next_task else "",
-            "points_reward": next_task.points_reward if next_task else 0
-        } if next_task else None
+        "next_task": next_task,
+        "days_since_registration": current_day
     }
 
 @api_router.get("/my-submissions")
@@ -582,87 +643,6 @@ async def get_my_submissions(current_user: User = Depends(get_current_user), db:
     db_service = DatabaseService(db)
     submissions = await db_service.get_user_submissions(current_user.id)
     return submissions
-
-@api_router.get("/group-leaders")
-async def get_group_leaders(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Get list of unique group leaders - accessible to all authenticated users"""
-    db_service = DatabaseService(db)
-
-    # Get all active ambassadors
-    ambassadors = await db_service.get_all_ambassadors()
-
-    # Extract unique group leaders
-    group_leaders = list(set([amb.group_leader_name for amb in ambassadors if amb.group_leader_name]))
-
-    return {"group_leaders": sorted(group_leaders)}
-
-@api_router.get("/admin/submissions")
-async def get_admin_submissions(
-    group_leader: str = None,
-    start_date: str = None,
-    end_date: str = None,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    # Verify admin access
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    db_service = DatabaseService(db)
-    submissions = await db_service.get_detailed_submissions(group_leader, start_date, end_date)
-
-    # Transform to detailed submission format
-    detailed_submissions = []
-    for submission in submissions:
-        detailed_submissions.append(DetailedSubmission(
-            id=submission.id,
-            task_id=submission.task_id,
-            task_title=submission.task.title if submission.task else "Unknown Task",
-            task_day=submission.day,
-            user_id=submission.user_id,
-            user_name=submission.user.name if submission.user else "Unknown User",
-            user_email=submission.user.email if submission.user else "Unknown Email",
-            user_college=submission.user.college if submission.user else "Unknown College",
-            group_leader_name=submission.user.group_leader_name if submission.user else "Unknown Leader",
-            status_text=submission.status_text,
-            people_connected=submission.people_connected,
-            points_earned=submission.points_earned,
-            submission_date=submission.submission_date,
-            is_completed=submission.is_completed
-        ))
-
-    return detailed_submissions
-
-@api_router.get("/admin/ambassadors")
-async def get_admin_ambassadors(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    # Verify admin access
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    db_service = DatabaseService(db)
-    ambassadors = await db_service.get_all_ambassadors()
-
-    # Get task completion counts for each ambassador
-    ambassador_data = []
-    for ambassador in ambassadors:
-        submissions = await db_service.get_user_submissions(ambassador.id)
-        tasks_completed = len(submissions)
-
-        ambassador_data.append({
-            "id": ambassador.id,
-            "name": ambassador.name,
-            "email": ambassador.email,
-            "college": ambassador.college,
-            "group_leader_name": ambassador.group_leader_name,
-            "total_points": ambassador.total_points,
-            "tasks_completed": tasks_completed,
-            "current_day": ambassador.current_day,
-            "status": ambassador.status,
-            "registration_date": ambassador.registration_date,
-            "last_login": ambassador.last_login
-        })
-
-    return ambassador_data
 
 # @api_router.post("/submit-task-with-files")
 # async def submit_task_with_files(
@@ -690,6 +670,13 @@ async def submit_task_with_files(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
+    # Verify task is available for user
+    available_tasks = await get_available_tasks_for_user(current_user, db)
+    available_task_ids = {t["id"] for t in available_tasks}
+    
+    if task_id not in available_task_ids:
+        raise HTTPException(status_code=400, detail="Task not available for your current day")
+
     # 2) Save files locally (adjust path as you like)
     upload_dir = Path("uploads")
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -704,13 +691,12 @@ async def submit_task_with_files(
             dest.write_bytes(content)
             saved_filenames.append(f.filename)
     except Exception as e:
-        # Surface a 400 instead of a 500 so you see the real issue in the client
         raise HTTPException(status_code=400, detail=f"Failed to save files: {e}")
 
     # 3) Compute points
     points_earned = task.points_reward + (people_connected * 10)
 
-    # 4) Build the submission payload ONLY with columns your model has
+    # 4) Build the submission payload
     submission_data = {
         "user_id": current_user.id,
         "task_id": task_id,
@@ -720,8 +706,6 @@ async def submit_task_with_files(
         "points_earned": points_earned,
         "is_completed": True,
         "submission_date": datetime.utcnow(),
-        # If your Submission model has a column for filenames, use the correct name here:
-        # e.g. "file_names": ",".join(saved_filenames)
     }
 
     # 5) Upsert submission
@@ -741,10 +725,6 @@ async def submit_task_with_files(
         submission_data["id"] = str(uuid.uuid4())
         await db_service.create_submission(submission_data)
         await db_service.update_user_points(current_user.id, points_earned, people_connected)
-
-    # 6) Advance current day if needed
-    if task.day == current_user.current_day:
-        await db_service.update_user_current_day(current_user.id, current_user.current_day + 1)
 
     return {
         "message": "Task submitted successfully",
@@ -770,152 +750,15 @@ async def change_password(
 
     return {"message": "Password changed successfully"}
 
-# Admin Task Management Endpoints
-@api_router.get("/admin/tasks")
-async def get_admin_tasks(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    # Verify admin access
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    db_service = DatabaseService(db)
-    tasks = await db_service.get_all_tasks()  # Get all tasks including inactive ones
-
-    # Convert to admin format
-    admin_tasks = []
-    for task in tasks:
-        admin_tasks.append({
-            "id": task.id,
-            "title": task.title,
-            "description": task.description,
-            "day": task.day,
-            "points": task.points_reward,
-            "status": "active" if task.is_active else "draft",
-            "created_by": task.created_by or "admin",
-            "created_at": task.created_at.strftime("%Y-%m-%d") if task.created_at else "",
-            "updated_at": task.updated_at.strftime("%Y-%m-%d") if task.updated_at else ""
-        })
-
-    return admin_tasks
-
-@api_router.post("/admin/tasks")
-async def create_admin_task(
-    task_data: dict,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    # Verify admin access
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    db_service = DatabaseService(db)
-
-    # Create task data
-    new_task_data = {
-        "id": str(uuid.uuid4()),
-        "day": task_data.get("day", 1),
-        "title": task_data.get("title", ""),
-        "description": task_data.get("description", ""),
-        "task_type": "admin_created",
-        "points_reward": task_data.get("points", 100),
-        "is_active": task_data.get("status", "active") == "active",
-        "created_by": current_user.email
-    }
-
-    task = await db_service.create_task(new_task_data)
-
-    # Return in admin format
-    return {
-        "id": task.id,
-        "title": task.title,
-        "description": task.description,
-        "day": task.day,
-        "points": task.points_reward,
-        "status": "active" if task.is_active else "draft",
-        "created_by": task.created_by or "admin",
-        "created_at": task.created_at.strftime("%Y-%m-%d") if task.created_at else "",
-        "updated_at": task.updated_at.strftime("%Y-%m-%d") if task.updated_at else ""
-    }
-
-@api_router.put("/admin/tasks/{task_id}")
-async def update_admin_task(
-    task_id: str,
-    task_data: dict,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    # Verify admin access
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    db_service = DatabaseService(db)
-
-    # Get existing task
-    existing_task = await db_service.get_task_by_id(task_id)
-    if not existing_task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    # Update task data
-    update_data = {
-        "title": task_data.get("title", existing_task.title),
-        "description": task_data.get("description", existing_task.description),
-        "day": task_data.get("day", existing_task.day),
-        "points_reward": task_data.get("points", existing_task.points_reward),
-        "is_active": task_data.get("status", "active") == "active"
-    }
-
-    updated_task = await db_service.update_task(task_id, update_data)
-
-    # Return in admin format
-    return {
-        "id": updated_task.id,
-        "title": updated_task.title,
-        "description": updated_task.description,
-        "day": updated_task.day,
-        "points": updated_task.points_reward,
-        "status": "active" if updated_task.is_active else "draft",
-        "created_by": updated_task.created_by or "admin",
-        "created_at": updated_task.created_at.strftime("%Y-%m-%d") if updated_task.created_at else "",
-        "updated_at": updated_task.updated_at.strftime("%Y-%m-%d") if updated_task.updated_at else ""
-    }
-
-@api_router.delete("/admin/tasks/{task_id}")
-async def delete_admin_task(
-    task_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    # Verify admin access
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    db_service = DatabaseService(db)
-
-    # Check if task exists
-    existing_task = await db_service.get_task_by_id(task_id)
-    if not existing_task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    # Delete task
-    await db_service.delete_task(task_id)
-
-    return {"message": "Task deleted successfully"}
-
 # Initialize tasks on startup
 # @app.on_event("startup")
 # async def startup_event():
 #     await init_db()
 #     await initialize_tasks()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Include the router in the main app (move this AFTER CORS middleware)
 app.include_router(api_router)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=5000, log_level="info")
