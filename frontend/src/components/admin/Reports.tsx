@@ -767,135 +767,7 @@ const Reports: React.FC = () => {
     setShowUserSubmissionsModal(true);
   };
 
-  // Enhanced Excel export with detailed ambassador information grouped by leaders
-  const exportDetailedExcelReport = () => {
-    if (!reportData) return;
 
-    const workbook = XLSX.utils.book_new();
-
-    // Summary Sheet
-    const summaryData = [
-      ['Ambassador Platform - Detailed Report', ''],
-      ['Generated on:', new Date().toLocaleDateString()],
-      ['Filter Applied:', selectedGroupLeader === 'all' ? 'All Group Leaders' : selectedGroupLeader],
-      ['Date Range:', dateRange.start && dateRange.end ? `${dateRange.start} to ${dateRange.end}` : 'All Time'],
-      [''],
-      ['Summary Statistics', ''],
-      ['Total Ambassadors', reportData.totalAmbassadors],
-      ['Active Ambassadors', metrics?.active_ambassadors || 0],
-      ['Total Tasks Completed', reportData.totalTasks],
-      ['Total Points Distributed', reportData.totalPoints],
-      ['Total People Connected', reportData.totalPeopleConnected],
-      ['Average Task Time', reportData.averageTaskTime]
-    ];
-
-    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
-
-    // Group ambassadors by their group leaders
-    const groupedAmbassadors: { [key: string]: Ambassador[] } = {};
-    ambassadors.forEach(ambassador => {
-      const leader = ambassador.group_leader_name || 'No Group Leader';
-      if (!groupedAmbassadors[leader]) {
-        groupedAmbassadors[leader] = [];
-      }
-      groupedAmbassadors[leader].push(ambassador);
-    });
-
-    // Create detailed sheet with ambassadors grouped by leaders
-    const detailedData = [
-      ['Detailed Ambassador Information by Group Leader', '', '', '', '', '', '', '', '', '', '', '', '', ''],
-      ['Ambassador Name', 'Email', 'College', 'Status', 'Join Date', 'Last Activity', 'Total Points', 'Current Day', 'Total Referrals', 'Events Hosted', 'Students Reached', 'Revenue Generated', 'Social Media Posts', 'Engagement Rate']
-    ];
-
-    // Add data for each group leader
-    Object.keys(groupedAmbassadors).sort().forEach(leaderName => {
-      // Add group leader header
-      detailedData.push([`GROUP LEADER: ${leaderName}`, '', '', '', '', '', '', '', '', '', '', '', '', '']);
-
-      // Add ambassadors under this leader
-      groupedAmbassadors[leaderName].forEach(ambassador => {
-        detailedData.push([
-          ambassador.name,
-          ambassador.email,
-          ambassador.college,
-          ambassador.status,
-          ambassador.join_date,
-          ambassador.last_activity,
-          ambassador.total_points.toString(),
-          ambassador.current_day.toString(),
-          ambassador.total_referrals.toString(),
-          ambassador.events_hosted.toString(),
-          ambassador.students_reached.toString(),
-          ambassador.revenue_generated.toString(),
-          ambassador.social_media_posts.toString(),
-          ambassador.engagement_rate.toString()
-        ]);
-      });
-
-      // Add empty row between groups
-      detailedData.push(['', '', '', '', '', '', '', '', '', '', '', '', '', '']);
-    });
-
-    const detailedSheet = XLSX.utils.aoa_to_sheet(detailedData);
-    XLSX.utils.book_append_sheet(workbook, detailedSheet, 'Ambassadors by Group Leader');
-
-    // Group Leader Summary Sheet
-    const groupLeaderSummaryData = [
-      ['Group Leader Performance Summary', '', '', '', '', ''],
-      ['Group Leader', 'Total Ambassadors', 'Active Ambassadors', 'Total Points', 'Average Points per Ambassador', 'Total Tasks Completed']
-    ];
-
-    Object.keys(groupedAmbassadors).sort().forEach(leaderName => {
-      const ambassadorsInGroup = groupedAmbassadors[leaderName];
-      const activeCount = ambassadorsInGroup.filter(amb => amb.status === 'active').length;
-      const totalPoints = ambassadorsInGroup.reduce((sum, amb) => sum + amb.total_points, 0);
-      const avgPoints = ambassadorsInGroup.length > 0 ? Math.round(totalPoints / ambassadorsInGroup.length) : 0;
-
-      // Count tasks completed by ambassadors in this group
-      const groupTasksCompleted = filteredSubmissions.filter(sub =>
-        ambassadorsInGroup.some(amb => amb.id === sub.user_id)
-      ).length;
-
-      groupLeaderSummaryData.push([
-        leaderName,
-        ambassadorsInGroup.length.toString(),
-        activeCount.toString(),
-        totalPoints.toString(),
-        avgPoints.toString(),
-        groupTasksCompleted.toString()
-      ]);
-    });
-
-    const groupLeaderSummarySheet = XLSX.utils.aoa_to_sheet(groupLeaderSummaryData);
-    XLSX.utils.book_append_sheet(workbook, groupLeaderSummarySheet, 'Group Leader Summary');
-
-    // Auto-size columns for all sheets
-    [summarySheet, detailedSheet, groupLeaderSummarySheet].forEach(sheet => {
-      const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
-      const columnWidths = [];
-      for (let col = range.s.c; col <= range.e.c; col++) {
-        let maxWidth = 10;
-        for (let row = range.s.r; row <= range.e.r; row++) {
-          const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
-          const cell = sheet[cellAddress];
-          if (cell && cell.v) {
-            const cellLength = cell.v.toString().length;
-            maxWidth = Math.max(maxWidth, cellLength);
-          }
-        }
-        columnWidths.push({ wch: Math.min(maxWidth + 2, 50) });
-      }
-      sheet['!cols'] = columnWidths;
-    });
-
-    // Generate and download file
-    const fileName = selectedGroupLeader === 'all'
-      ? `Detailed_Ambassador_Report_All_Groups_${new Date().toISOString().split('T')[0]}.xlsx`
-      : `Detailed_Ambassador_Report_${selectedGroupLeader.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
-
-    XLSX.writeFile(workbook, fileName);
-  };
 
   // Export functions
   const exportToExcel = () => {
@@ -1134,13 +1006,6 @@ const Reports: React.FC = () => {
 
   const exportOptions = [
     {
-      name: 'Detailed Excel',
-      description: 'Enhanced report with ambassadors grouped by leaders',
-      color: 'bg-emerald-600',
-      status: 'Most Comprehensive',
-      details: 'Detailed ambassador info grouped by group leaders with performance metrics'
-    },
-    {
       name: 'Excel',
       description: 'Comprehensive multi-sheet report with ambassador analysis',
       color: 'bg-green-600',
@@ -1344,8 +1209,7 @@ const Reports: React.FC = () => {
                   <p className="text-gray-400 text-xs mb-4">{option.details}</p>
                   <Button
                     onClick={() => {
-                      if (option.name === 'Detailed Excel') exportDetailedExcelReport();
-                      else if (option.name === 'Excel') exportToExcel();
+                      if (option.name === 'Excel') exportToExcel();
                       else if (option.name === 'CSV') exportToCSV();
                       else if (option.name === 'JSON') exportToJSON();
                     }}
@@ -1362,7 +1226,7 @@ const Reports: React.FC = () => {
         </Card>
 
         {/* Ambassador Summary */}
-        {reportData && (
+        {/* {reportData && (
           <Card className="bg-gray-800 border-gray-700 mb-8">
             <CardHeader>
               <CardTitle className="text-white flex items-center space-x-2">
@@ -1395,7 +1259,7 @@ const Reports: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-        )}
+        )} */}
 
         {/* Ambassador Submissions Summary Table */}
         {filteredSubmissions.length > 0 && (() => {

@@ -7,18 +7,17 @@ import { useTaskData } from '../../hooks/useTaskData';
 const BACKEND_URL = 'http://127.0.0.1:5000';
 
 interface DashboardStats {
-  current_day_tasks: number;
-  tasks_completed: number;
+  current_day: number;
+  total_tasks_completed: number;
   total_points: number;
-  current_rank: string;
-  people_connected: number;
+  rank: number;
+  total_referrals: number;
+  completion_percentage: number;
   next_task?: {
     id: string;
     title: string;
     description: string;
-    points: number;
-    priority: string;
-    day: number;
+    points_reward: number;
   };
 }
 
@@ -31,19 +30,28 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
 
   // Sample data for demonstration
   const sampleStats: DashboardStats = {
-    current_day_tasks: 5,
-    tasks_completed: 12,
-    total_points: 850,
-    current_rank: "Top 10%",
-    people_connected: 45,
+    current_day: 1,
+    total_tasks_completed: 2,
+    total_points: 380,
+    rank: 5,
+    total_referrals: 3,
+    completion_percentage: 85.5,
     next_task: {
       id: "task_001",
       title: "Complete Orientation",
       description: "Watch the orientation video and read the company documents. This will help you understand our mission and how to be an effective ambassador.",
-      points: 100,
-      priority: "High Priority",
-      day: 0
+      points_reward: 100
     }
+  };
+
+  // Add this helper function
+  const getDaysSinceRegistration = () => {
+    if (!user?.registration_date) return 1;
+    const registrationDate = new Date(user.registration_date);
+    const currentDate = new Date();
+    const diffTime = Math.abs(currentDate.getTime() - registrationDate.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays + 1; // +1 because day 1 starts on registration day
   };
 
   useEffect(() => {
@@ -130,8 +138,8 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm font-medium">Current Day</p>
-                  <p className="text-2xl font-bold text-white mt-1">{dashboardStats?.current_day_tasks || 0}</p>
-                  <p className="text-green-400 text-xs mt-1">+12% from last week</p>
+                  <p className="text-2xl font-bold text-white mt-1">{getDaysSinceRegistration()}</p>
+                  <p className="text-green-400 text-xs mt-1">Days since registration</p>
                 </div>
                 <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
                   <Calendar className="h-6 w-6 text-white" />
@@ -145,7 +153,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm font-medium">Tasks Completed</p>
-                  <p className="text-2xl font-bold text-white mt-1">{stats.completedTasks || 0}</p>
+                  <p className="text-2xl font-bold text-white mt-1">{dashboardStats?.total_tasks_completed || 0}</p>
                   <p className="text-blue-400 text-xs mt-1">Total completed</p>
                 </div>
                 <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center">
@@ -160,8 +168,8 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm font-medium">Total Points</p>
-                  <p className="text-2xl font-bold text-white mt-1">{stats.totalPoints || 0}</p>
-                  <p className="text-green-400 text-xs mt-1">Avg {stats.averagePointsPerTask.toFixed(0)} per task</p>
+                  <p className="text-2xl font-bold text-white mt-1">{dashboardStats?.total_points || 0}</p>
+                  <p className="text-green-400 text-xs mt-1">Avg {dashboardStats?.total_tasks_completed ? Math.round(dashboardStats.total_points / dashboardStats.total_tasks_completed) : 0} per task</p>
                 </div>
                 <div className="w-12 h-12 bg-yellow-600 rounded-lg flex items-center justify-center">
                   <Award className="h-6 w-6 text-white" />
@@ -175,7 +183,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm font-medium">Current Rank</p>
-                  <p className="text-2xl font-bold text-white mt-1">{dashboardStats?.current_rank || 'N/A'}</p>
+                  <p className="text-2xl font-bold text-white mt-1">#{dashboardStats?.rank || 'N/A'}</p>
                   <p className="text-blue-400 text-xs mt-1">Among all ambassadors</p>
                 </div>
                 <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
@@ -199,12 +207,12 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-gray-300">Tasks Progress</span>
-                    <span className="text-sm font-medium text-white">{stats.completedTasks} / {stats.totalTasks}</span>
+                    <span className="text-sm font-medium text-white">{dashboardStats?.total_tasks_completed || 0} / {(dashboardStats?.current_day || 0) + 1}</span>
                   </div>
                   <div className="w-full bg-gray-700 rounded-full h-3">
                     <div
                       className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500"
-                      style={{ width: `${stats.totalTasks > 0 ? (stats.completedTasks / stats.totalTasks) * 100 : 0}%` }}
+                      style={{ width: `${dashboardStats?.completion_percentage || 0}%` }}
                     ></div>
                   </div>
                 </div>
@@ -212,13 +220,13 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-gray-700 rounded-lg p-4 text-center">
                     <Users className="h-8 w-8 text-blue-400 mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-white">{stats.totalPeopleConnected}</p>
+                    <p className="text-2xl font-bold text-white">{dashboardStats?.total_referrals || 0}</p>
                     <p className="text-gray-400 text-sm">People Connected</p>
                   </div>
 
                   <div className="bg-gray-700 rounded-lg p-4 text-center">
                     <CheckCircle className="h-8 w-8 text-green-400 mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-white">{stats.completedTasks}</p>
+                    <p className="text-2xl font-bold text-white">{dashboardStats?.total_tasks_completed || 0}</p>
                     <p className="text-gray-400 text-sm">Tasks Completed</p>
                   </div>
                 </div>
@@ -227,11 +235,11 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                 <div className="border-t border-gray-600 pt-4 mt-auto">
                   <div className="grid grid-cols-2 gap-4 text-center">
                     <div>
-                      <p className="text-lg font-bold text-white">{stats.totalTasks}</p>
-                      <p className="text-gray-400 text-xs">Total Tasks</p>
+                      <p className="text-lg font-bold text-white">{(dashboardStats?.current_day || 0) + 1}</p>
+                      <p className="text-gray-400 text-xs">Available Tasks</p>
                     </div>
                     <div>
-                      <p className="text-lg font-bold text-white">{stats.averagePointsPerTask.toFixed(0)}</p>
+                      <p className="text-lg font-bold text-white">{dashboardStats?.total_tasks_completed ? Math.round(dashboardStats.total_points / dashboardStats.total_tasks_completed) : 0}</p>
                       <p className="text-gray-400 text-xs">Avg Points/Task</p>
                     </div>
                   </div>

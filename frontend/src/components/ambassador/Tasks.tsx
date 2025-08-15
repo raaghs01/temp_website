@@ -79,7 +79,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
     const currentDate = new Date();
     const diffTime = Math.abs(currentDate.getTime() - registrationDate.getTime());
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays + 1; // +1 because day 1 starts on registration day
+    return diffDays; // Day 0 is registration day, Day 1 is the next day
   };
 
   // Check if task is past deadline
@@ -230,6 +230,43 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
   const completedTasks = submissions.length;
   const successRate = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
 
+  // Enhanced task availability logic - unlock next 2 days based on completed tasks
+  const getAvailableTasks = () => {
+    const completedDays = new Set(
+      submissions
+        .filter(sub => sub.status === 'completed')
+        .map(sub => {
+          const task = tasks.find(t => t.id === sub.taskId);
+          return task ? task.day : -1;
+        })
+        .filter(day => day >= 0)
+    );
+
+    const highestCompletedDay = completedDays.size > 0 ? Math.max(...Array.from(completedDays)) : -1;
+    const daysSinceRegistration = getDaysSinceRegistration();
+    
+    return tasks.map(task => {
+      if (task.status === 'completed') return task;
+      
+      // Special handling for Day 0 (orientation)
+      if (task.day === 0) {
+        return {
+          ...task,
+          status: localStorage.getItem('orientationCompleted') === 'true' ? 'completed' : 'available'
+        };
+      }
+      
+      // Progressive unlocking: unlock up to 2 days ahead of highest completed
+      const maxAvailableDay = Math.max(daysSinceRegistration, highestCompletedDay + 2);
+      const isAvailable = task.day <= maxAvailableDay && !isTaskPastDeadline(task.day);
+      
+      return {
+        ...task,
+        status: isAvailable ? 'available' : 'locked'
+      };
+    });
+  };
+
   // Restore orientation completion from localStorage and update task statuses
   useEffect(() => {
     // Only run this effect after tasks have been loaded
@@ -308,7 +345,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
 
           let isAvailable = false;
           if (task.day <= 2) {
-            isAvailable = daysSinceRegistration >= 1 && !isPastDeadline;
+            isAvailable = daysSinceRegistration >= task.day && !isPastDeadline;
           } else {
             isAvailable = daysSinceRegistration >= task.day && !isPastDeadline;
           }
@@ -384,8 +421,8 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
               // Task availability logic based on registration date
               let isAvailable = false;
               if (taskDay <= 2) {
-                // Day 1-2 tasks: Available from day 1, expire on day 3
-                isAvailable = daysSinceRegistration >= 1 && !isPastDeadline;
+                // Day 1-2 tasks: Available from their respective day, expire 2 days later
+                isAvailable = daysSinceRegistration >= taskDay && !isPastDeadline;
               } else {
                 // Day 3+ tasks: Available on their respective day, expire 2 days later
                 isAvailable = daysSinceRegistration >= taskDay && !isPastDeadline;
