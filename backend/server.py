@@ -21,6 +21,8 @@ from io import BytesIO
 from contextlib import asynccontextmanager
 import traceback
 from fastapi.responses import JSONResponse
+from supabase import create_client, Client
+import uvicorn
 
 
 # Configure logging
@@ -38,6 +40,24 @@ load_dotenv(ROOT_DIR / '.env')
 JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_DELTA = timedelta(days=30)
+
+# Supabase Configuration
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_BUCKET = "submissions"
+
+# Create Supabase client (only if credentials are provided)
+supabase: Client = None
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print("✅ Supabase client initialized successfully")
+    except Exception as e:
+        print(f"⚠️ Failed to initialize Supabase client: {e}")
+        print("📁 File uploads will be stored locally in uploads/ directory")
+else:
+    print("⚠️ Supabase credentials not provided (SUPABASE_URL, SUPABASE_KEY)")
+    print("📁 File uploads will be stored locally in uploads/ directory")
 
 # Create the main app with lifespan
 @asynccontextmanager
@@ -212,7 +232,10 @@ async def get_available_tasks_for_user(user: User, db: AsyncSession) -> List[dic
         # Task availability logic based on your requirements
         is_available = False
         
-        if current_day == 1:
+        # Special case: Orientation task (Day 0) should always be available if not completed
+        if task.day == 0:
+            is_available = True  # Always show orientation task
+        elif current_day == 1:
             # Day 1: User gets day 0 (orientation), day 1, and day 2 tasks
             if task.day in [0, 1, 2]:
                 is_available = True
@@ -325,6 +348,10 @@ async def initialize_tasks():
             await db_service.create_task(task_data)
 
 # Routes
+@api_router.get("/health")
+async def health_check():
+    return {"status": "ok", "message": "Server is running"}
+
 @api_router.post("/register")
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     db_service = DatabaseService(db)
@@ -677,26 +704,10 @@ async def submit_task_with_files(
     if task_id not in available_task_ids:
         raise HTTPException(status_code=400, detail="Task not available for your current day")
 
-    # 2) Save files locally (adjust path as you like)
-    upload_dir = Path("uploads")
-    upload_dir.mkdir(parents=True, exist_ok=True)
-
-    saved_filenames: List[str] = []
-    try:
-        for f in files:
-            if not f.filename:
-                continue
-            dest = upload_dir / f.filename
-            content = await f.read()
-            dest.write_bytes(content)
-            saved_filenames.append(f.filename)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to save files: {e}")
-
-    # 3) Compute points
+    # 2) Compute points
     points_earned = task.points_reward + (people_connected * 10)
 
-    # 4) Build the submission payload
+    # 3) Build the submission payload
     submission_data = {
         "user_id": current_user.id,
         "task_id": task_id,
@@ -708,8 +719,9 @@ async def submit_task_with_files(
         "submission_date": datetime.utcnow(),
     }
 
-    # 5) Upsert submission
+    # 4) Upsert submission
     existing = await db_service.get_submission_by_user_and_task(current_user.id, task_id)
+    submission_id = None
 
     if existing:
         old_points = existing.points_earned
@@ -721,16 +733,268 @@ async def submit_task_with_files(
             point_diff,
             people_connected - existing.people_connected
         )
+        submission_id = existing.id
     else:
-        submission_data["id"] = str(uuid.uuid4())
+        submission_id = str(uuid.uuid4())
+        submission_data["id"] = submission_id
         await db_service.create_submission(submission_data)
         await db_service.update_user_points(current_user.id, points_earned, people_connected)
+
+    # 5) Upload files (Supabase or local fallback)
+    file_urls = []
+    
+    if supabase is not None:
+        # Upload to Supabase Storage
+        try:
+            for file in files:
+                if not file.filename:
+                    continue
+                    
+                # Generate unique file name
+                file_extension = file.filename.split(".")[-1] if "." in file.filename else "bin"
+                unique_filename = f"{submission_id}_{uuid.uuid4()}.{file_extension}"
+                
+                # Read file content
+                file_content = await file.read()
+                
+                # Upload to Supabase Storage
+                res = supabase.storage.from_(SUPABASE_BUCKET).upload(unique_filename, file_content)
+                
+                if res.get("error"):
+                    print(f"⚠️ Supabase upload error: {res['error']}")
+                    raise HTTPException(status_code=500, detail=f"Failed to upload file {file.filename}: {res['error']['message']}")
+                
+                # Get public URL
+                public_url = supabase.storage.from_(SUPABASE_BUCKET).get_public_url(unique_filename)
+                file_urls.append({
+                    "filename": file.filename,
+                    "url": public_url.public_url if hasattr(public_url, 'public_url') else public_url
+                })
+                
+                # Insert into submission_files table (if you have one, otherwise store in submission)
+                try:
+                    supabase.table("submission_files").insert({
+                        "submission_id": submission_id,
+                        "file_url": public_url.public_url if hasattr(public_url, 'public_url') else public_url,
+                        "filename": file.filename,
+                        "created_at": datetime.utcnow().isoformat()
+                    }).execute()
+                except Exception as e:
+                    print(f"⚠️ Could not insert into submission_files table: {e}")
+                    # Continue without failing if table doesn't exist
+                    
+        except Exception as e:
+            print(f"❌ File upload error: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to upload files: {str(e)}")
+    else:
+        # Fallback to local storage
+        uploads_dir = Path("uploads")
+        uploads_dir.mkdir(exist_ok=True)
+        
+        try:
+            for file in files:
+                if not file.filename:
+                    continue
+                    
+                # Generate unique file name
+                file_extension = file.filename.split(".")[-1] if "." in file.filename else "bin"
+                unique_filename = f"{submission_id}_{uuid.uuid4()}.{file_extension}"
+                
+                # Save to local uploads directory
+                file_path = uploads_dir / unique_filename
+                
+                # Read and save file content
+                file_content = await file.read()
+                with open(file_path, "wb") as f:
+                    f.write(file_content)
+                
+                file_urls.append({
+                    "filename": file.filename,
+                    "url": f"/uploads/{unique_filename}"  # Local path for now
+                })
+                
+                print(f"📁 File saved locally: {file_path}")
+                
+        except Exception as e:
+            print(f"❌ Local file save error: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to save files locally: {str(e)}")
 
     return {
         "message": "Task submitted successfully",
         "points_earned": points_earned,
-        "saved_files": saved_filenames,
+        "saved_files": [f["filename"] for f in file_urls],
+        "file_urls": file_urls,
     }
+
+# Admin endpoints for file management
+@api_router.post("/upload_submission")
+async def upload_submission(
+    submission_id: str = Form(...),  # existing submission_id
+    files: List[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    # Verify admin access
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if supabase is None:
+        raise HTTPException(status_code=503, detail="File upload service not available. Please configure Supabase credentials.")
+    
+    file_urls = []
+    
+    try:
+        for file in files:
+            if not file.filename:
+                continue
+                
+            # Generate unique file name
+            file_extension = file.filename.split(".")[-1] if "." in file.filename else "bin"
+            unique_filename = f"{submission_id}_{uuid.uuid4()}.{file_extension}"
+            
+            # Read file content
+            file_content = await file.read()
+            
+            # Upload to Supabase Storage
+            res = supabase.storage.from_(SUPABASE_BUCKET).upload(unique_filename, file_content)
+            
+            if res.get("error"):
+                print(f"⚠️ Supabase upload error: {res['error']}")
+                raise HTTPException(status_code=500, detail=f"Failed to upload file {file.filename}: {res['error']['message']}")
+            
+            # Get public URL
+            public_url = supabase.storage.from_(SUPABASE_BUCKET).get_public_url(unique_filename)
+            file_url = public_url.public_url if hasattr(public_url, 'public_url') else public_url
+            file_urls.append(file_url)
+            
+            # Insert into submission_files table
+            try:
+                supabase.table("submission_files").insert({
+                    "submission_id": submission_id,
+                    "file_url": file_url,
+                    "filename": file.filename,
+                    "created_at": datetime.utcnow().isoformat()
+                }).execute()
+            except Exception as e:
+                print(f"⚠️ Could not insert into submission_files table: {e}")
+                
+    except Exception as e:
+        print(f"❌ File upload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload files: {str(e)}")
+    
+    return {"message": "Files uploaded successfully", "file_urls": file_urls}
+
+@api_router.get("/admin/user_submissions/{user_id}")
+async def get_user_submissions_with_files(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # Verify admin access
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    db_service = DatabaseService(db)
+    
+    try:
+        # Fetch all submissions for this user from your database
+        submissions = await db_service.get_user_submissions(user_id)
+        submission_ids = [s.id for s in submissions]
+        
+        if not submission_ids:
+            return {"user_id": user_id, "submissions": [], "files": []}
+        
+        # Fetch all files for these submissions from Supabase (if available)
+        files_data = []
+        if supabase is not None:
+            try:
+                files_response = supabase.table("submission_files").select("*").in_("submission_id", submission_ids).execute()
+                files_data = files_response.data if files_response.data else []
+            except Exception as e:
+                print(f"⚠️ Could not fetch files from submission_files table: {e}")
+                files_data = []
+        else:
+            print("⚠️ Supabase not available, cannot fetch submission files")
+        
+        # Format submissions data
+        submissions_data = []
+        for submission in submissions:
+            submission_files = [f for f in files_data if f["submission_id"] == submission.id]
+            submissions_data.append({
+                "id": submission.id,
+                "task_id": submission.task_id,
+                "status_text": submission.status_text,
+                "people_connected": submission.people_connected,
+                "points_earned": submission.points_earned,
+                "submission_date": submission.submission_date.isoformat() if submission.submission_date else None,
+                "is_completed": submission.is_completed,
+                "files": submission_files
+            })
+        
+        return {
+            "user_id": user_id, 
+            "submissions": submissions_data,
+            "total_files": len(files_data)
+        }
+        
+    except Exception as e:
+        print(f"❌ Error fetching user submissions: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch user submissions")
+
+@api_router.get("/admin/all_submissions_with_files")
+async def get_all_submissions_with_files(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # Verify admin access
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    db_service = DatabaseService(db)
+    
+    try:
+        # Get all users and their submissions
+        all_users = await db_service.get_all_users()  # You may need to implement this method
+        
+        all_submissions_with_files = []
+        
+        for user in all_users:
+            submissions = await db_service.get_user_submissions(user.id)
+            
+            for submission in submissions:
+                # Fetch files for this submission (if Supabase is available)
+                files_data = []
+                if supabase is not None:
+                    try:
+                        files_response = supabase.table("submission_files").select("*").eq("submission_id", submission.id).execute()
+                        files_data = files_response.data if files_response.data else []
+                    except Exception as e:
+                        print(f"⚠️ Could not fetch files for submission {submission.id}: {e}")
+                        files_data = []
+                else:
+                    print("⚠️ Supabase not available, cannot fetch submission files")
+                
+                all_submissions_with_files.append({
+                    "user_id": user.id,
+                    "user_name": user.name,
+                    "user_email": user.email,
+                    "submission": {
+                        "id": submission.id,
+                        "task_id": submission.task_id,
+                        "status_text": submission.status_text,
+                        "people_connected": submission.people_connected,
+                        "points_earned": submission.points_earned,
+                        "submission_date": submission.submission_date.isoformat() if submission.submission_date else None,
+                        "is_completed": submission.is_completed,
+                        "files": files_data
+                    }
+                })
+        
+        return {"submissions": all_submissions_with_files}
+        
+    except Exception as e:
+        print(f"❌ Error fetching all submissions: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch all submissions")
+
 @api_router.post("/change-password")
 async def change_password(
     data: ChangePasswordRequest,

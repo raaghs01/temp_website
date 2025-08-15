@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { FileText, Download, Users, Award, CheckCircle, Filter, X } from 'lucide-react';
+import { FileText, Download, Users, Award, CheckCircle, Filter, X, Eye } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useTaskData, useFilteredTaskData } from '../../hooks/useTaskData';
 
@@ -21,6 +21,11 @@ interface TaskSubmission {
   peopleConnected?: number;
   category?: string;
   priority?: string;
+  files?: Array<{
+    filename: string;
+    url: string;
+    created_at?: string;
+  }>;
 }
 
 interface ReportData {
@@ -51,6 +56,8 @@ const Reports: React.FC = () => {
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [allSubmissions, setAllSubmissions] = useState<TaskSubmission[]>([]);
   const [filteredSubmissions, setFilteredSubmissions] = useState<TaskSubmission[]>([]);
+  const [selectedSubmission, setSelectedSubmission] = useState<TaskSubmission | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
 
   // Use the new task data service
   const { stats, completions, loading: taskLoading } = useTaskData();
@@ -360,6 +367,12 @@ const Reports: React.FC = () => {
   const clearFilters = () => {
     setSelectedGroupLeader('all');
     setDateRange({ start: '', end: '' });
+  };
+
+  // View submission details
+  const viewSubmissionDetails = (submission: TaskSubmission) => {
+    setSelectedSubmission(submission);
+    setShowDetailsModal(true);
   };
 
   // Update report data when task data changes
@@ -1053,11 +1066,8 @@ const Reports: React.FC = () => {
                     <tr className="border-b border-gray-700">
                       <th className="text-left py-3 px-4 text-gray-300 font-medium">Day</th>
                       <th className="text-left py-3 px-4 text-gray-300 font-medium">Task</th>
-                      {/* <th className="text-left py-3 px-4 text-gray-300 font-medium">Date</th> */}
-                      {/* <th className="text-left py-3 px-4 text-gray-300 font-medium">Points</th> */}
-                      {/* <th className="text-left py-3 px-4 text-gray-300 font-medium">People</th> */}
-                      {/* <th className="text-left py-3 px-4 text-gray-300 font-medium">Priority</th> */}
                       <th className="text-left py-3 px-4 text-gray-300 font-medium">Status</th>
+                      <th className="text-center py-3 px-4 text-gray-300 font-medium">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1078,27 +1088,32 @@ const Reports: React.FC = () => {
                                 </p>
                               </div>
                             </td>
-                            {/* <td className="py-3 px-4 text-gray-300">
-                              {new Date(completion.completedAt).toLocaleDateString()}
-                            </td> */}
-                            {/* <td className="py-3 px-4">
-                              <span className="text-yellow-400 font-medium">{completion.points}</span>
-                            </td> */}
-                            {/* <td className="py-3 px-4">
-                              <div className="flex items-center space-x-1">
-                                <Users className="h-3 w-3 text-purple-400" />
-                                <span className="text-purple-400">{completion.peopleConnected}</span>
-                              </div>
-                            </td> */}
-                            {/* <td className="py-3 px-4">
-                              <span className={`text-xs font-medium ${getPriorityColor(completion.priority)}`}>
-                                {completion.priority.toUpperCase()}
-                              </span>
-                            </td> */}
                             <td className="py-3 px-4">
                               <span className="px-2 py-1 bg-green-600 text-green-100 rounded-full text-xs">
                                 Completed
                               </span>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <Button
+                                onClick={() => viewSubmissionDetails({
+                                  id: completion.id,
+                                  taskId: completion.taskId,
+                                  taskTitle: completion.taskTitle,
+                                  submissionText: completion.submissionText,
+                                  imageUrl: completion.imageUrl,
+                                  submittedAt: completion.submittedAt,
+                                  completedAt: completion.completedAt,
+                                  status: 'completed',
+                                  points: completion.points,
+                                  peopleConnected: completion.peopleConnected,
+                                  category: completion.category
+                                })}
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-blue-400 hover:text-blue-300 hover:bg-blue-900/20"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
                             </td>
                           </tr>
                         );
@@ -1141,6 +1156,7 @@ const Reports: React.FC = () => {
                       <th className="text-center py-3 px-2 text-gray-400 font-medium">People Connected</th>
                       <th className="text-left py-3 px-2 text-gray-400 font-medium">Submission Date</th>
                       <th className="text-center py-3 px-2 text-gray-400 font-medium">Status</th>
+                      <th className="text-center py-3 px-2 text-gray-400 font-medium">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1170,6 +1186,16 @@ const Reports: React.FC = () => {
                           <span className="bg-green-600 text-white px-2 py-1 rounded text-xs font-medium">
                             {submission.status}
                           </span>
+                        </td>
+                        <td className="py-3 px-2 text-center">
+                          <Button
+                            onClick={() => viewSubmissionDetails(submission)}
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-blue-400 hover:text-blue-300 hover:bg-blue-900/20"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -1285,6 +1311,265 @@ const Reports: React.FC = () => {
           </Card>
         )}
 
+        {/* Submission Details Modal */}
+        {showDetailsModal && selectedSubmission && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+            <div className="bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                {/* Modal Header */}
+                <div className="flex items-center justify-between mb-6 border-b border-gray-700 pb-4">
+                  <h3 className="text-2xl font-bold text-white">Task Submission Details</h3>
+                  <Button
+                    onClick={() => setShowDetailsModal(false)}
+                    variant="ghost"
+                    size="sm"
+                    className="text-gray-400 hover:text-white"
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
+
+                {/* Task Information */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-lg font-semibold text-white mb-2">Task Information</h4>
+                      <div className="bg-gray-700 rounded-lg p-4 space-y-3">
+                        <div>
+                          <span className="text-gray-400 text-sm">Task Title:</span>
+                          <p className="text-white font-medium">{selectedSubmission.taskTitle}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 text-sm">Task ID:</span>
+                          <p className="text-white font-mono text-sm">{selectedSubmission.taskId}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 text-sm">Category:</span>
+                          <p className="text-white">{selectedSubmission.category || 'General'}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 text-sm">Priority:</span>
+                          <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                            selectedSubmission.priority === 'high' ? 'bg-red-600 text-red-100' :
+                            selectedSubmission.priority === 'medium' ? 'bg-yellow-600 text-yellow-100' :
+                            'bg-green-600 text-green-100'
+                          }`}>
+                            {selectedSubmission.priority?.toUpperCase() || 'NORMAL'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-lg font-semibold text-white mb-2">Submission Metrics</h4>
+                      <div className="bg-gray-700 rounded-lg p-4 space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-400">Points Earned:</span>
+                          <span className="text-yellow-400 font-bold text-lg">{selectedSubmission.points}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-400">People Connected:</span>
+                          <span className="text-purple-400 font-medium">{selectedSubmission.peopleConnected || 0}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-400">Status:</span>
+                          <span className="bg-green-600 text-green-100 px-2 py-1 rounded-full text-xs font-medium">
+                            {selectedSubmission.status}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400 text-sm">Submitted:</span>
+                          <p className="text-white">
+                            {new Date(selectedSubmission.submittedAt).toLocaleString()}
+                          </p>
+                        </div>
+                        {selectedSubmission.completedAt && (
+                          <div>
+                            <span className="text-gray-400 text-sm">Completed:</span>
+                            <p className="text-white">
+                              {new Date(selectedSubmission.completedAt).toLocaleString()}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Submission Text */}
+                <div className="mb-6">
+                  <h4 className="text-lg font-semibold text-white mb-3">Submission Description</h4>
+                  <div className="bg-gray-700 rounded-lg p-4">
+                    <p className="text-gray-300 leading-relaxed whitespace-pre-wrap">
+                      {selectedSubmission.submissionText || 'No description provided.'}
+                    </p>
+                    <div className="mt-3 pt-3 border-t border-gray-600">
+                      <span className="text-gray-400 text-sm">
+                        Word count: {selectedSubmission.submissionText?.split(/\s+/).filter(word => word.length > 0).length || 0} words
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Images and Files */}
+                {(selectedSubmission.imageUrl || (selectedSubmission.files && selectedSubmission.files.length > 0)) && (
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-white mb-3">Uploaded Files</h4>
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {/* Show files from Supabase if available */}
+                        {selectedSubmission.files && selectedSubmission.files.length > 0 ? (
+                          selectedSubmission.files.map((file, index) => {
+                            const isImage = file.filename.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/);
+                            const isPDF = file.filename.toLowerCase().endsWith('.pdf');
+                            
+                            return (
+                              <div key={index} className="relative group">
+                                {isImage ? (
+                                  <img
+                                    src={file.url}
+                                    alt={file.filename}
+                                    className="w-full h-40 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                                    onClick={() => window.open(file.url, '_blank')}
+                                  />
+                                ) : (
+                                  <div 
+                                    className="w-full h-40 bg-gray-600 rounded-lg cursor-pointer hover:bg-gray-500 transition-colors flex flex-col items-center justify-center"
+                                    onClick={() => window.open(file.url, '_blank')}
+                                  >
+                                    <FileText className="h-12 w-12 text-gray-300 mb-2" />
+                                    <span className="text-gray-300 text-sm text-center px-2 break-words">
+                                      {file.filename}
+                                    </span>
+                                    {isPDF && (
+                                      <span className="text-xs text-blue-400 mt-1">PDF</span>
+                                    )}
+                                  </div>
+                                )}
+                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded-lg flex items-center justify-center">
+                                  <Eye className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </div>
+                                <div className="mt-2">
+                                  <p className="text-gray-400 text-xs text-center truncate">{file.filename}</p>
+                                  {file.created_at && (
+                                    <p className="text-gray-500 text-xs text-center">
+                                      {new Date(file.created_at).toLocaleDateString()}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : selectedSubmission.imageUrl ? (
+                          // Fallback to old imageUrl format
+                          <div className="relative group">
+                            <img
+                              src={selectedSubmission.imageUrl}
+                              alt="Submission evidence"
+                              className="w-full h-40 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                              onClick={() => window.open(selectedSubmission.imageUrl, '_blank')}
+                            />
+                            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded-lg flex items-center justify-center">
+                              <Eye className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="mt-4 flex justify-between items-center">
+                        <p className="text-gray-400 text-sm">Click on files to view in full size</p>
+                        {selectedSubmission.files && selectedSubmission.files.length > 0 && (
+                          <span className="text-blue-400 text-sm font-medium">
+                            {selectedSubmission.files.length} file{selectedSubmission.files.length !== 1 ? 's' : ''} uploaded
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Analysis and Keywords */}
+                <div className="mb-6">
+                  <h4 className="text-lg font-semibold text-white mb-3">Submission Analysis</h4>
+                  <div className="bg-gray-700 rounded-lg p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <h5 className="text-white font-medium mb-2">Detected Activities:</h5>
+                        <div className="flex flex-wrap gap-2">
+                          {['posted', 'shared', 'created', 'organized', 'connected'].map(activity => {
+                            const isDetected = selectedSubmission.submissionText?.toLowerCase().includes(activity);
+                            return (
+                              <span
+                                key={activity}
+                                className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  isDetected 
+                                    ? 'bg-green-600 text-green-100' 
+                                    : 'bg-gray-600 text-gray-300'
+                                }`}
+                              >
+                                {activity}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div>
+                        <h5 className="text-white font-medium mb-2">Social Platforms:</h5>
+                        <div className="flex flex-wrap gap-2">
+                          {['instagram', 'facebook', 'linkedin', 'twitter', 'youtube'].map(platform => {
+                            const isDetected = selectedSubmission.submissionText?.toLowerCase().includes(platform);
+                            return (
+                              <span
+                                key={platform}
+                                className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  isDetected 
+                                    ? 'bg-blue-600 text-blue-100' 
+                                    : 'bg-gray-600 text-gray-300'
+                                }`}
+                              >
+                                {platform}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end space-x-3 pt-4 border-t border-gray-700">
+                  <Button
+                    onClick={() => setShowDetailsModal(false)}
+                    variant="outline"
+                    className="border-gray-600 text-gray-300 hover:bg-gray-700"
+                  >
+                    Close
+                  </Button>
+                  {(selectedSubmission.files && selectedSubmission.files.length > 0) || selectedSubmission.imageUrl ? (
+                    <Button
+                      onClick={() => {
+                        if (selectedSubmission.files && selectedSubmission.files.length > 0) {
+                          // Open all files in new tabs
+                          selectedSubmission.files.forEach(file => {
+                            window.open(file.url, '_blank');
+                          });
+                        } else if (selectedSubmission.imageUrl) {
+                          window.open(selectedSubmission.imageUrl, '_blank');
+                        }
+                      }}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      View Files {selectedSubmission.files && selectedSubmission.files.length > 1 ? `(${selectedSubmission.files.length})` : ''}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

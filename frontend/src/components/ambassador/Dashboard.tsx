@@ -45,13 +45,9 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
   };
 
   // Add this helper function
-  const getDaysSinceRegistration = () => {
-    if (!user?.registration_date) return 1;
-    const registrationDate = new Date(user.registration_date);
-    const currentDate = new Date();
-    const diffTime = Math.abs(currentDate.getTime() - registrationDate.getTime());
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays + 1; // +1 because day 1 starts on registration day
+  const getCurrentDay = () => {
+    // Use the backend's current_day for consistency
+    return dashboardStats?.current_day || 1;
   };
 
   useEffect(() => {
@@ -138,7 +134,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm font-medium">Current Day</p>
-                  <p className="text-2xl font-bold text-white mt-1">{getDaysSinceRegistration()}</p>
+                  <p className="text-2xl font-bold text-white mt-1">{getCurrentDay()}</p>
                   <p className="text-green-400 text-xs mt-1">Days since registration</p>
                 </div>
                 <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">

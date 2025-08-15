@@ -3,7 +3,7 @@ from sqlalchemy import select, update, delete, and_, desc
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
-from models import User, Task, Submission, Analytics
+from models import User, Task, Submission, Analytics, SubmissionFile
 import uuid
 
 class DatabaseService:
@@ -84,23 +84,26 @@ class DatabaseService:
             select(Submission)
             .where(Submission.user_id == user_id)
             .order_by(desc(Submission.submission_date))
-            .options(selectinload(Submission.task))
+            .options(
+                selectinload(Submission.task),
+                selectinload(Submission.files)
+            )
         )
         return result.scalars().all()
     
     async def get_submission_by_user_task(self, user_id: str, task_id: str) -> Optional[Submission]:
         result = await self.session.execute(
-            select(Submission).where(
-                and_(Submission.user_id == user_id, Submission.task_id == task_id)
-            )
+            select(Submission)
+            .where(and_(Submission.user_id == user_id, Submission.task_id == task_id))
+            .options(selectinload(Submission.files))
         )
         return result.scalar_one_or_none()
     
     async def get_submission_by_user_and_task(self, user_id: str, task_id: str) -> Optional[Submission]:
         result = await self.session.execute(
-            select(Submission).where(
-                and_(Submission.user_id == user_id, Submission.task_id == task_id)
-            )
+            select(Submission)
+            .where(and_(Submission.user_id == user_id, Submission.task_id == task_id))
+            .options(selectinload(Submission.files))
         )
         return result.scalar_one_or_none()
     
@@ -108,6 +111,75 @@ class DatabaseService:
         result = await self.session.execute(
             update(Submission)
             .where(Submission.id == submission_id)
+            .values(**update_data)
+        )
+        await self.session.commit()
+        return result.rowcount > 0
+    
+    # Submission file operations
+    async def create_submission_file(self, file_data: dict) -> str:
+        """Create a new submission file record"""
+        submission_file = SubmissionFile(**file_data)
+        self.session.add(submission_file)
+        await self.session.commit()
+        await self.session.refresh(submission_file)
+        return submission_file.id
+    
+    async def create_submission_files(self, submission_id: str, file_urls: List[str], file_types: List[str] = None) -> List[str]:
+        """Create multiple submission file records for a submission"""
+        file_ids = []
+        file_types = file_types or [None] * len(file_urls)
+        
+        for i, file_url in enumerate(file_urls):
+            file_data = {
+                "submission_id": submission_id,
+                "file_url": file_url,
+                "file_type": file_types[i] if i < len(file_types) else None
+            }
+            submission_file = SubmissionFile(**file_data)
+            self.session.add(submission_file)
+            file_ids.append(submission_file.id)
+        
+        await self.session.commit()
+        return file_ids
+    
+    async def get_submission_files(self, submission_id: str) -> List[SubmissionFile]:
+        """Get all files for a specific submission"""
+        result = await self.session.execute(
+            select(SubmissionFile)
+            .where(SubmissionFile.submission_id == submission_id)
+            .order_by(SubmissionFile.uploaded_at)
+        )
+        return result.scalars().all()
+    
+    async def get_submission_file_by_id(self, file_id: str) -> Optional[SubmissionFile]:
+        """Get a specific submission file by ID"""
+        result = await self.session.execute(
+            select(SubmissionFile).where(SubmissionFile.id == file_id)
+        )
+        return result.scalar_one_or_none()
+    
+    async def delete_submission_file(self, file_id: str) -> bool:
+        """Delete a submission file by ID"""
+        result = await self.session.execute(
+            delete(SubmissionFile).where(SubmissionFile.id == file_id)
+        )
+        await self.session.commit()
+        return result.rowcount > 0
+    
+    async def delete_submission_files_by_submission(self, submission_id: str) -> int:
+        """Delete all files for a specific submission"""
+        result = await self.session.execute(
+            delete(SubmissionFile).where(SubmissionFile.submission_id == submission_id)
+        )
+        await self.session.commit()
+        return result.rowcount
+    
+    async def update_submission_file(self, file_id: str, update_data: dict) -> bool:
+        """Update a submission file record"""
+        result = await self.session.execute(
+            update(SubmissionFile)
+            .where(SubmissionFile.id == file_id)
             .values(**update_data)
         )
         await self.session.commit()
@@ -134,7 +206,8 @@ class DatabaseService:
     async def get_detailed_submissions(self, group_leader: str = None, start_date: str = None, end_date: str = None) -> List[Submission]:
         query = select(Submission).options(
             selectinload(Submission.user),
-            selectinload(Submission.task)
+            selectinload(Submission.task),
+            selectinload(Submission.files)
         )
 
         conditions = []
@@ -223,7 +296,9 @@ class DatabaseService:
 
     async def get_all_submissions(self) -> List[Submission]:
         result = await self.session.execute(
-            select(Submission).order_by(desc(Submission.submission_date))
+            select(Submission)
+            .order_by(desc(Submission.submission_date))
+            .options(selectinload(Submission.files))
         )
         return result.scalars().all()
 

@@ -37,6 +37,17 @@ class User(Base):
     submissions = relationship("Submission", back_populates="user")
     analytics = relationship("Analytics", back_populates="user")
 
+class SubmissionFile(Base):
+    __tablename__ = "submission_files"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    submission_id = Column(String, ForeignKey("submissions.id"), nullable=False, index=True)
+    file_url = Column(Text, nullable=False)
+    file_type = Column(String, nullable=True)
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
+
+    submission = relationship("Submission", back_populates="files")
+
 class Task(Base):
     __tablename__ = "tasks"
     
@@ -90,6 +101,7 @@ class Submission(Base):
     
     # Relationships
     user = relationship("User", back_populates="submissions")
+    files = relationship("SubmissionFile", back_populates="submission")
     task = relationship("Task", back_populates="submissions")
 
 class Analytics(Base):
