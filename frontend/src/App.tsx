@@ -97,10 +97,23 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const login = (token: string, userData: User): void => {
+  const login = (token: string, userData: User, isNewRegistration: boolean = false): void => {
     localStorage.setItem('token', token);
     setToken(token);
     setUser(userData);
+
+    // Clear task-related localStorage data for new registrations
+    if (isNewRegistration) {
+      // Clear any existing task completion data
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('task_') || key.startsWith('orientation_') || key.includes('completed'))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+    }
   };
 
   const logout = (): void => {
@@ -227,8 +240,8 @@ const LoginForm: React.FC = () => {
       console.log('Request data:', requestData);
       
       const response = await axios.post<{ token: string; user: User }>(fullUrl, requestData);
-      
-      login(response.data.token, response.data.user);
+
+      login(response.data.token, response.data.user, !isLogin);
       setSuccess(isLogin ? 'Login successful!' : 'Account created successfully!');
     } catch (error: any) {
       const errorMessage = error.response?.data?.detail || 
