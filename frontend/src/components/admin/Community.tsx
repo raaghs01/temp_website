@@ -19,6 +19,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
+const BACKEND_URL = 'http://127.0.0.1:5000';
+
 interface CommunityPost {
   id: string;
   author_id: string;
@@ -193,15 +195,45 @@ const Community: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setStats(sampleStats);
-        setPosts(samplePosts);
-        setAnnouncements(sampleAnnouncements);
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.error('No authentication token found');
+          setLoading(false);
+          return;
+        }
+
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        };
+
+        // Fetch community stats
+        const statsResponse = await fetch(`${BACKEND_URL}/api/admin/community/stats`, { headers });
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json();
+          setStats(statsData);
+        }
+
+        // Fetch community posts
+        const postsResponse = await fetch(`${BACKEND_URL}/api/admin/community/posts`, { headers });
+        if (postsResponse.ok) {
+          const postsData = await postsResponse.json();
+          setPosts(postsData);
+        }
+
+        // Fetch announcements
+        const announcementsResponse = await fetch(`${BACKEND_URL}/api/admin/community/announcements`, { headers });
+        if (announcementsResponse.ok) {
+          const announcementsData = await announcementsResponse.json();
+          setAnnouncements(announcementsData);
+        }
+
       } catch (error) {
         console.error('Error fetching community data:', error);
-        setStats(sampleStats);
-        setPosts(samplePosts);
-        setAnnouncements(sampleAnnouncements);
+        // Set empty data on error
+        setStats(null);
+        setPosts([]);
+        setAnnouncements([]);
       } finally {
         setLoading(false);
       }

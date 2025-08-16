@@ -11,7 +11,7 @@ interface ProfileProps {
   logout?: () => void;
 }
 
-const BACKEND_URL = 'http://127.0.0.1:5000';
+const BACKEND_URL = 'http://127.0.0.1:5001';
 
 const Profile: React.FC<ProfileProps> = ({ user, refreshUser, logout }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -545,7 +545,7 @@ const Profile: React.FC<ProfileProps> = ({ user, refreshUser, logout }) => {
                     <Calendar className="h-4 w-4 text-gray-400" />
                   </div>
                   <p className="text-white font-semibold">
-                    {new Date().toLocaleDateString()}
+                    {user?.registration_date ? new Date(user.registration_date).toLocaleDateString() : 'Unknown'}
                   </p>
                 </div>
 

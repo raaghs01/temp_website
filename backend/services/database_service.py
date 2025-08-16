@@ -294,6 +294,49 @@ class DatabaseService:
         )
         return result.scalars().all()
 
+    async def update_user_status(self, user_id: str, status: str) -> bool:
+        """Update user status (active, inactive, suspended)"""
+        result = await self.session.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(status=status, is_active=(status == "active"))
+        )
+        await self.session.commit()
+        return result.rowcount > 0
+
+    async def get_task_by_id(self, task_id: str) -> Task:
+        """Get a specific task by ID"""
+        result = await self.session.execute(
+            select(Task).where(Task.id == task_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def create_task(self, task_data: dict) -> str:
+        """Create a new task"""
+        new_task = Task(**task_data)
+        self.session.add(new_task)
+        await self.session.commit()
+        await self.session.refresh(new_task)
+        return str(new_task.id)
+
+    async def update_task(self, task_id: str, update_data: dict) -> bool:
+        """Update a task"""
+        result = await self.session.execute(
+            update(Task)
+            .where(Task.id == task_id)
+            .values(**update_data)
+        )
+        await self.session.commit()
+        return result.rowcount > 0
+
+    async def delete_task(self, task_id: str) -> bool:
+        """Delete a task"""
+        result = await self.session.execute(
+            delete(Task).where(Task.id == task_id)
+        )
+        await self.session.commit()
+        return result.rowcount > 0
+
     async def get_all_submissions(self) -> List[Submission]:
         result = await self.session.execute(
             select(Submission)

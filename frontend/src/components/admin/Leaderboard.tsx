@@ -36,7 +36,7 @@ interface LeaderboardStats {
   total_points_awarded: number;
 }
 
-const BACKEND_URL = 'http://127.0.0.1:5000';
+const BACKEND_URL = 'http://127.0.0.1:5001';
 
 const Leaderboard: React.FC = () => {
   const [ambassadors, setAmbassadors] = useState<Ambassador[]>([]);
@@ -50,120 +50,18 @@ const Leaderboard: React.FC = () => {
   const [selectedAmbassador, setSelectedAmbassador] = useState<Ambassador | null>(null);
   const [showAmbassadorModal, setShowAmbassadorModal] = useState(false);
 
-  // Sample data
-  const sampleStats: LeaderboardStats = {
-    total_ambassadors: 145,
-    active_this_week: 128,
-    total_points_awarded: 125600
-  };
+  // Fallback data for when API fails
+  const generateFallbackData = () => {
+    const fallbackStats: LeaderboardStats = {
+      total_ambassadors: 0,
+      active_this_week: 0,
+      total_points_awarded: 0
+    };
 
-  const sampleAmbassadors: Ambassador[] = [
-    {
-      id: 'amb_001',
-      name: 'Ananya Sharma',
-      email: 'ananya@college.edu',
-      college: 'IIT Delhi',
-      group_leader_name: 'Dr. Rajesh Kumar',
-      rank: 1,
-      points: 2250,
-      tasks_completed: 45,
-      people_referred: 12,
-      last_activity: '2 hours ago',
-      status: 'active',
-      growth_trend: 'up',
-      weekly_change: 15
-    },
-    {
-      id: 'amb_002',
-      name: 'Rahul Kumar',
-      email: 'rahul@college.edu',
-      college: 'IIT Bombay',
-      group_leader_name: 'Prof. Meera Singh',
-      rank: 2,
-      points: 2100,
-      tasks_completed: 42,
-      people_referred: 10,
-      last_activity: '5 hours ago',
-      status: 'active',
-      growth_trend: 'up',
-      weekly_change: 8
-    },
-    {
-      id: 'amb_003',
-      name: 'Priya Patel',
-      email: 'priya@college.edu',
-      college: 'IIT Madras',
-      group_leader_name: 'Dr. Rajesh Kumar',
-      rank: 3,
-      points: 1950,
-      tasks_completed: 38,
-      people_referred: 8,
-      last_activity: '1 day ago',
-      status: 'active',
-      growth_trend: 'stable',
-      weekly_change: 2
-    },
-    {
-      id: 'amb_004',
-      name: 'Arjun Singh',
-      email: 'arjun@college.edu',
-      college: 'IIT Kanpur',
-      group_leader_name: 'Prof. Meera Singh',
-      rank: 4,
-      points: 1800,
-      tasks_completed: 35,
-      people_referred: 6,
-      last_activity: '3 hours ago',
-      status: 'active',
-      growth_trend: 'down',
-      weekly_change: -5
-    },
-    {
-      id: 'amb_005',
-      name: 'Sneha Reddy',
-      email: 'sneha@college.edu',
-      college: 'IIT Hyderabad',
-      group_leader_name: 'Dr. Amit Sharma',
-      rank: 5,
-      points: 1650,
-      tasks_completed: 32,
-      people_referred: 7,
-      last_activity: '1 hour ago',
-      status: 'active',
-      growth_trend: 'up',
-      weekly_change: 12
-    },
-    {
-      id: 'amb_006',
-      name: 'Vikram Joshi',
-      email: 'vikram@college.edu',
-      college: 'IIT Roorkee',
-      group_leader_name: 'Dr. Amit Sharma',
-      rank: 6,
-      points: 1500,
-      tasks_completed: 28,
-      people_referred: 5,
-      last_activity: '2 days ago',
-      status: 'inactive',
-      growth_trend: 'down',
-      weekly_change: -10
-    },
-    {
-      id: 'amb_007',
-      name: 'Kavya Nair',
-      email: 'kavya@college.edu',
-      college: 'IIT Guwahati',
-      group_leader_name: 'Prof. Sunita Patel',
-      rank: 7,
-      points: 1350,
-      tasks_completed: 25,
-      people_referred: 4,
-      last_activity: '1 week ago',
-      status: 'suspended',
-      growth_trend: 'down',
-      weekly_change: -20
-    }
-  ];
+    const fallbackAmbassadors: Ambassador[] = [];
+
+    return { stats: fallbackStats, ambassadors: fallbackAmbassadors };
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -173,11 +71,10 @@ const Leaderboard: React.FC = () => {
 
         if (!token) {
           console.error('No authentication token found');
-          setStats(sampleStats);
-          setAmbassadors(sampleAmbassadors);
-          // Extract group leaders from sample data
-          const leaders = Array.from(new Set(sampleAmbassadors.map(amb => amb.group_leader_name)));
-          setGroupLeaders(leaders);
+          const fallbackData = generateFallbackData();
+          setStats(fallbackData.stats);
+          setAmbassadors(fallbackData.ambassadors);
+          setGroupLeaders([]);
           setLoading(false);
           return;
         }
@@ -307,11 +204,10 @@ const Leaderboard: React.FC = () => {
         }));
       } catch (error) {
         console.error('Error fetching leaderboard:', error);
-        setStats(sampleStats);
-        setAmbassadors(sampleAmbassadors);
-        // Extract group leaders from sample data
-        const leaders = Array.from(new Set(sampleAmbassadors.map(amb => amb.group_leader_name)));
-        setGroupLeaders(leaders);
+        const fallbackData = generateFallbackData();
+        setStats(fallbackData.stats);
+        setAmbassadors(fallbackData.ambassadors);
+        setGroupLeaders([]);
       } finally {
         setLoading(false);
       }
@@ -502,6 +398,20 @@ const Leaderboard: React.FC = () => {
             </CardContent>
           </Card>
 
+          {/* <Card className="bg-gray-800 border-gray-700">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-400 text-sm font-medium">Tasks Completed</p>
+                  <p className="text-2xl font-bold text-white mt-1">{ambassadors.reduce((sum, amb) => sum + amb.tasks_completed, 0)}</p>
+                  <p className="text-purple-400 text-xs mt-1">Total submissions</p>
+                </div>
+                <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
+                  <Trophy className="h-6 w-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card> */}
 
         </div>
 
@@ -571,6 +481,7 @@ const Leaderboard: React.FC = () => {
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Rank</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Ambassador</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Group Leader</th>
+                    <th className="text-center py-3 px-4 text-gray-300 font-medium">Tasks Completed</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Status</th>
                     <th className="text-left py-3 px-4 text-gray-300 font-medium">Actions</th>
                   </tr>
@@ -605,6 +516,12 @@ const Leaderboard: React.FC = () => {
                           <span className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-medium">
                             {ambassador.group_leader_name}
                           </span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex flex-col items-center">
+                          <span className="text-white font-bold text-lg">{ambassador.tasks_completed}</span>
+                          <span className="text-gray-400 text-xs">tasks</span>
                         </div>
                       </td>
                       <td className="py-3 px-4">

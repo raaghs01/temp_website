@@ -4,7 +4,7 @@ import { TrendingUp, Users, Award, Calendar, CheckCircle, Clock } from 'lucide-r
 import { Button } from '@/components/ui/button';
 import { useTaskData } from '../../hooks/useTaskData';
 
-const BACKEND_URL = 'http://127.0.0.1:5000';
+const BACKEND_URL = 'http://127.0.0.1:5001';
 
 interface DashboardStats {
   current_day: number;
@@ -13,6 +13,8 @@ interface DashboardStats {
   rank: number;
   total_referrals: number;
   completion_percentage: number;
+  total_available_tasks: number;
+  days_since_registration: number;
   next_task?: {
     id: string;
     title: string;
@@ -28,20 +30,17 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
   const { stats } = useTaskData();
   const [showVideoModal, setShowVideoModal] = useState(false);
 
-  // Sample data for demonstration
-  const sampleStats: DashboardStats = {
+  // Default empty stats
+  const defaultStats: DashboardStats = {
     current_day: 1,
-    total_tasks_completed: 2,
-    total_points: 380,
-    rank: 5,
-    total_referrals: 3,
-    completion_percentage: 85.5,
-    next_task: {
-      id: "task_001",
-      title: "Complete Orientation",
-      description: "Watch the orientation video and read the company documents. This will help you understand our mission and how to be an effective ambassador.",
-      points_reward: 100
-    }
+    total_tasks_completed: 0,
+    total_points: 0,
+    rank: 0,
+    total_referrals: 0,
+    completion_percentage: 0,
+    total_available_tasks: 0,
+    days_since_registration: 1,
+    next_task: undefined
   };
 
   // Add this helper function
@@ -55,6 +54,8 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
       try {
         const token = localStorage.getItem('token');
         if (!token) {
+          console.error('No authentication token found');
+          setDashboardStats(defaultStats);
           setLoading(false);
           return;
         }
@@ -68,14 +69,17 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
 
         if (response.ok) {
           const data = await response.json();
+          console.log('Dashboard stats received:', data);
           setDashboardStats(data);
         } else {
-          console.error('Failed to fetch dashboard stats');
-          setDashboardStats(sampleStats); // Fallback to sample data
+          console.error('Failed to fetch dashboard stats:', response.status, response.statusText);
+          const errorText = await response.text();
+          console.error('Error details:', errorText);
+          setDashboardStats(defaultStats);
         }
       } catch (error) {
         console.error('Error fetching dashboard stats:', error);
-        setDashboardStats(sampleStats); // Fallback to sample data
+        setDashboardStats(defaultStats);
       } finally {
         setLoading(false);
       }
@@ -203,7 +207,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-gray-300">Tasks Progress</span>
-                    <span className="text-sm font-medium text-white">{dashboardStats?.total_tasks_completed || 0} / {(dashboardStats?.current_day || 0) + 1}</span>
+                    <span className="text-sm font-medium text-white">{dashboardStats?.total_tasks_completed || 0} / {dashboardStats?.total_available_tasks || 0}</span>
                   </div>
                   <div className="w-full bg-gray-700 rounded-full h-3">
                     <div
@@ -231,7 +235,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
                 <div className="border-t border-gray-600 pt-4 mt-auto">
                   <div className="grid grid-cols-2 gap-4 text-center">
                     <div>
-                      <p className="text-lg font-bold text-white">{(dashboardStats?.current_day || 0) + 1}</p>
+                      <p className="text-lg font-bold text-white">{dashboardStats?.total_available_tasks || 0}</p>
                       <p className="text-gray-400 text-xs">Available Tasks</p>
                     </div>
                     <div>

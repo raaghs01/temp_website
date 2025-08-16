@@ -4,7 +4,7 @@ import { Trophy, Medal, Award, Crown, TrendingUp, Users, Star, Target, Eye, Chec
 import { Button } from '@/components/ui/button';
 import { useTaskData } from '../../hooks/useTaskData';
 
-const BACKEND_URL = 'http://127.0.0.1:5000';
+const BACKEND_URL = 'http://127.0.0.1:5001';
 
 interface LeaderboardEntry {
   id: string;
@@ -33,105 +33,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
 
 
 
-  // Sample data
-  const sampleLeaderboard: LeaderboardEntry[] = [
-    {
-      id: '1',
-      rank: 1,
-      name: 'Sarah Johnson',
-      college: 'MIT',
-      group_leader_name: 'Dr. Smith',
-      points: 2850,
-      tasks_completed: 24,
-      avatar: 'SJ',
-      trend: 'up',
-      last_activity: '2 hours ago'
-    },
-    {
-      id: '2',
-      rank: 2,
-      name: 'Michael Chen',
-      college: 'Stanford',
-      group_leader_name: 'Prof. Johnson',
-      points: 2720,
-      tasks_completed: 22,
-      avatar: 'MC',
-      trend: 'up',
-      last_activity: '1 hour ago'
-    },
-    {
-      id: '3',
-      rank: 3,
-      name: 'Emily Rodriguez',
-      college: 'Harvard',
-      group_leader_name: 'Dr. Williams',
-      points: 2580,
-      tasks_completed: 20,
-      avatar: 'ER',
-      trend: 'stable',
-      last_activity: '3 hours ago'
-    },
-    {
-      id: '4',
-      rank: 4,
-      name: 'David Kim',
-      college: 'UC Berkeley',
-      group_leader_name: 'Prof. Davis',
-      points: 2450,
-      tasks_completed: 19,
-      avatar: 'DK',
-      trend: 'down',
-      last_activity: '5 hours ago'
-    },
-    {
-      id: '5',
-      rank: 5,
-      name: 'Lisa Wang',
-      college: 'Yale',
-      group_leader_name: 'Dr. Brown',
-      points: 2320,
-      tasks_completed: 18,
-      avatar: 'LW',
-      trend: 'up',
-      last_activity: '1 day ago'
-    },
-    {
-      id: '6',
-      rank: 6,
-      name: 'James Wilson',
-      college: 'Princeton',
-      group_leader_name: 'Prof. Miller',
-      points: 2180,
-      tasks_completed: 17,
-      avatar: 'JW',
-      trend: 'stable',
-      last_activity: '2 days ago'
-    },
-    {
-      id: '7',
-      rank: 7,
-      name: 'Maria Garcia',
-      college: 'Columbia',
-      group_leader_name: 'Dr. Wilson',
-      points: 2050,
-      tasks_completed: 16,
-      avatar: 'MG',
-      trend: 'up',
-      last_activity: '1 day ago'
-    },
-    {
-      id: '8',
-      rank: 8,
-      name: 'Alex Thompson',
-      college: 'Duke',
-      group_leader_name: 'Prof. Taylor',
-      points: 1920,
-      tasks_completed: 15,
-      avatar: 'AT',
-      trend: 'down',
-      last_activity: '3 days ago'
-    }
-  ];
+  // No sample data - fetch from API only
 
   // Function to fetch user's current rank from backend
   const fetchUserRank = async () => {
@@ -220,16 +122,16 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ user }) => {
 
           setUserRank(currentUserRank || 0);
         } else {
-          console.error('Failed to fetch leaderboard');
-          setLeaderboardData(sampleLeaderboard);
-          // Use user's rank_position if available, otherwise fallback
-          setUserRank(user?.rank_position || 15);
+          console.error('Failed to fetch leaderboard:', response.status, response.statusText);
+          const errorText = await response.text();
+          console.error('Error details:', errorText);
+          setLeaderboardData([]);
+          setUserRank(user?.rank_position || 0);
         }
       } catch (error) {
         console.error('Error fetching leaderboard:', error);
-        setLeaderboardData(sampleLeaderboard);
-        // Use user's rank_position if available, otherwise fallback
-        setUserRank(user?.rank_position || 15);
+        setLeaderboardData([]);
+        setUserRank(user?.rank_position || 0);
       } finally {
         setLoading(false);
       }

@@ -19,6 +19,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
+const BACKEND_URL = 'http://127.0.0.1:5001';
+
 interface AdminProfile {
   id: string;
   name: string;
@@ -60,52 +62,44 @@ const Profile: React.FC<{ user: any; refreshUser: () => Promise<void>; logout?: 
     confirm_password: ''
   });
 
-  const sampleProfile: AdminProfile = {
-    id: 'admin_001',
-    name: 'Admin User',
-    email: 'admin@test.com',
-    role: 'System Administrator',
-    department: 'DS Team',
-    created_at: '2023-06-15',
-    last_login: '2024-01-15 14:30:00',
-    permissions: [
-      'user_management',
-      'system_settings',
-      'data_export',
-      'security_config',
-      'analytics_access',
-      'task_management'
-    ],
-    settings: {
-      email_notifications: true,
-      security_alerts: true,
-      weekly_reports: true,
-      system_updates: false
-    }
-  };
-
-  const sampleStats: AdminStats = {
-    users_managed: 145,
-    reports_generated: 67,
-    system_actions: 1247,
-    uptime_maintained: 99.8
-  };
-
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setProfile(sampleProfile);
-        setStats(sampleStats);
-        setEditForm({
-          name: sampleProfile.name,
-          email: sampleProfile.email,
-          department: sampleProfile.department
-        });
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.error('No authentication token found');
+          setLoading(false);
+          return;
+        }
+
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        };
+
+        // Fetch admin profile
+        const profileResponse = await fetch(`${BACKEND_URL}/api/admin/profile`, { headers });
+        if (profileResponse.ok) {
+          const profileData = await profileResponse.json();
+          setProfile(profileData);
+          setEditForm({
+            name: profileData.name,
+            email: profileData.email,
+            department: profileData.department
+          });
+        }
+
+        // Fetch admin stats
+        const statsResponse = await fetch(`${BACKEND_URL}/api/admin/profile/stats`, { headers });
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json();
+          setStats(statsData);
+        }
+
       } catch (error) {
         console.error('Error fetching profile:', error);
-        setProfile(sampleProfile);
-        setStats(sampleStats);
+        setProfile(null);
+        setStats(null);
       } finally {
         setLoading(false);
       }
@@ -120,19 +114,44 @@ const Profile: React.FC<{ user: any; refreshUser: () => Promise<void>; logout?: 
 
   const handleSave = async () => {
     try {
-      if (profile) {
-        const updatedProfile = {
-          ...profile,
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert('Authentication required');
+        return;
+      }
+
+      const response = await fetch(`${BACKEND_URL}/api/admin/profile`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           name: editForm.name,
           email: editForm.email,
           department: editForm.department
-        };
-        setProfile(updatedProfile);
+        })
+      });
+
+      if (response.ok) {
+        if (profile) {
+          const updatedProfile = {
+            ...profile,
+            name: editForm.name,
+            email: editForm.email,
+            department: editForm.department
+          };
+          setProfile(updatedProfile);
+        }
         setIsEditing(false);
         await refreshUser();
         alert('Profile updated successfully!');
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to update profile: ${errorData.detail || 'Unknown error'}`);
       }
     } catch (error) {
+      console.error('Error updating profile:', error);
       alert('Failed to update profile. Please try again.');
     }
   };
@@ -153,17 +172,40 @@ const Profile: React.FC<{ user: any; refreshUser: () => Promise<void>; logout?: 
       alert('New passwords do not match!');
       return;
     }
-    
+
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      alert('Password changed successfully!');
-      setShowPasswordModal(false);
-      setPasswordForm({
-        current_password: '',
-        new_password: '',
-        confirm_password: ''
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert('Authentication required');
+        return;
+      }
+
+      const response = await fetch(`${BACKEND_URL}/api/admin/change-password`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          current_password: passwordForm.current_password,
+          new_password: passwordForm.new_password
+        })
       });
+
+      if (response.ok) {
+        alert('Password changed successfully!');
+        setShowPasswordModal(false);
+        setPasswordForm({
+          current_password: '',
+          new_password: '',
+          confirm_password: ''
+        });
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to change password: ${errorData.detail || 'Unknown error'}`);
+      }
     } catch (error) {
+      console.error('Error changing password:', error);
       alert('Failed to change password. Please try again.');
     }
   };

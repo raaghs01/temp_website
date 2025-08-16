@@ -6,7 +6,7 @@ import { FileText, Download, Users, Award, CheckCircle, Filter, X, Eye } from 'l
 import * as XLSX from 'xlsx';
 import { useTaskData, useFilteredTaskData } from '../../hooks/useTaskData';
 
-const BACKEND_URL = 'http://127.0.0.1:5000';
+const BACKEND_URL = 'http://127.0.0.1:5001';
 
 interface TaskSubmission {
   id: string;
@@ -211,51 +211,7 @@ const Reports: React.FC = () => {
           // priority: sub.priority || 'medium'
         }));
 
-        // If no real submissions, add sample data for demonstration
-        if (submissions.length === 0) {
-          submissions = [
-            {
-              id: '1',
-              taskId: '3',
-              taskTitle: 'Student Outreach - Day 3',
-              submissionText: 'Successfully connected with 15 students during the campus event. Organized a small meetup and collected valuable feedback about student preferences.',
-              submittedAt: '2024-01-10T10:30:00Z',
-              completedAt: '2024-01-10T14:45:00Z',
-              status: 'completed',
-              points: 180,
-              peopleConnected: 15,
-              category: 'Outreach',
-              priority: 'high'
-            },
-            {
-              id: '2',
-              taskId: '1',
-              taskTitle: 'Social Media Campaign - Day 0',
-              submissionText: 'Created and posted 5 engaging posts across Instagram, Twitter, and LinkedIn. Achieved 200+ likes and 50+ shares with proper hashtags and brand mentions.',
-              imageUrl: '/sample-post.jpg',
-              submittedAt: '2024-01-08T15:45:00Z',
-              completedAt: '2024-01-08T18:30:00Z',
-              status: 'completed',
-              points: 150,
-              peopleConnected: 8,
-              category: 'Social Media',
-              priority: 'medium'
-            },
-            {
-              id: '3',
-              taskId: '2',
-              taskTitle: 'Campus Event Promotion - Day 2',
-              submissionText: 'Distributed 100 flyers across 5 different campus locations and posted announcements on 3 university notice boards. Also shared event details in 4 student WhatsApp groups.',
-              submittedAt: '2024-01-09T09:15:00Z',
-              completedAt: '2024-01-09T16:20:00Z',
-              status: 'completed',
-              points: 170,
-              peopleConnected: 25,
-              category: 'Events',
-              priority: 'high'
-            }
-          ];
-        }
+        // No sample data - show real user data only
 
         // Process data for reports
         const processedData = processReportData(submissions);

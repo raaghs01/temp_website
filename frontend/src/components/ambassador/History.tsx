@@ -4,7 +4,7 @@ import { Clock, CheckCircle, AlertCircle, Calendar, Award, FileText, Image as Im
 import { Button } from '@/components/ui/button';
 import { useTaskData, useFilteredTaskData } from '../../hooks/useTaskData';
 
-const BACKEND_URL = 'http://127.0.0.1:5000';
+const BACKEND_URL = 'http://127.0.0.1:5001';
 
 const History: React.FC = () => {
   const [submissions, setSubmissions] = useState<any[]>([]);

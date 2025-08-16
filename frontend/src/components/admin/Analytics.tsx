@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  TrendingUp, 
-  Users, 
-  Award, 
-  Calendar, 
+import {
+  TrendingUp,
+  Users,
+  Award,
+  Calendar,
   BarChart3,
   Activity,
   Target,
@@ -13,6 +13,8 @@ import {
   Filter
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+
+const BACKEND_URL = 'http://127.0.0.1:5001';
 
 interface SystemMetrics {
   totalAmbassadors: number;
@@ -29,26 +31,72 @@ const Analytics: React.FC = () => {
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'quarter'>('month');
-
-  const sampleMetrics: SystemMetrics = {
-    totalAmbassadors: 145,
-    activeAmbassadors: 128,
-    weeklyGrowth: 12.5,
-    avgTaskCompletion: 78.3,
-    totalPointsAwarded: 125600,
-    systemUptime: 99.8,
-    peakActiveHours: '6:00 PM - 9:00 PM',
-    topPerformingCollege: 'IIT Delhi'
-  };
+  const [growthData, setGrowthData] = useState<Array<{month: string; registrations: number; activations: number}>>([]);
 
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setMetrics(sampleMetrics);
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.error('No authentication token found');
+          setLoading(false);
+          return;
+        }
+
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        };
+
+        // Fetch growth analytics
+        const growthResponse = await fetch(`${BACKEND_URL}/api/admin/analytics/growth`, { headers });
+        let growthDataResponse = null;
+        if (growthResponse.ok) {
+          growthDataResponse = await growthResponse.json();
+
+          // Transform monthly data for chart
+          if (growthDataResponse?.monthly_data) {
+            const chartData = growthDataResponse.monthly_data.map((item: any) => ({
+              month: item.month,
+              registrations: item.registrations,
+              activations: item.activations
+            }));
+            setGrowthData(chartData);
+          }
+        }
+
+        // Fetch performance analytics
+        const performanceResponse = await fetch(`${BACKEND_URL}/api/admin/analytics/performance`, { headers });
+        let performanceData = null;
+        if (performanceResponse.ok) {
+          performanceData = await performanceResponse.json();
+        }
+
+        // Fetch engagement analytics
+        const engagementResponse = await fetch(`${BACKEND_URL}/api/admin/analytics/engagement`, { headers });
+        let engagementData = null;
+        if (engagementResponse.ok) {
+          engagementData = await engagementResponse.json();
+        }
+
+        // Combine data into metrics format
+        if (growthDataResponse || performanceData || engagementData) {
+          const combinedMetrics: SystemMetrics = {
+            totalAmbassadors: growthDataResponse?.total_ambassadors || 0,
+            activeAmbassadors: growthDataResponse?.active_ambassadors || 0,
+            weeklyGrowth: growthDataResponse?.weekly_growth || 0,
+            avgTaskCompletion: performanceData?.overall_stats?.completion_rate || 0,
+            totalPointsAwarded: growthDataResponse?.total_points_awarded || 0,
+            systemUptime: growthDataResponse?.system_uptime || 99.8,
+            peakActiveHours: engagementData?.peak_hours || 'N/A',
+            topPerformingCollege: performanceData?.college_rankings?.[0]?.college || 'N/A'
+          };
+          setMetrics(combinedMetrics);
+        }
+
       } catch (error) {
         console.error('Error fetching analytics:', error);
-        setMetrics(sampleMetrics);
+        setMetrics(null);
       } finally {
         setLoading(false);
       }
@@ -172,7 +220,7 @@ const Analytics: React.FC = () => {
             </CardHeader>
             <CardContent>
               <div className="h-80 bg-gray-700 rounded-lg p-4">
-                <GrowthChart />
+                <GrowthChart data={growthData} />
               </div>
             </CardContent>
           </Card>
@@ -290,17 +338,39 @@ const Analytics: React.FC = () => {
 export default Analytics;
 
 // Growth Chart Component
-const GrowthChart: React.FC = () => {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-  const registrations = [15, 23, 18, 32, 28, 35];
-  const activations = [12, 20, 16, 28, 25, 31];
-  
+interface GrowthChartProps {
+  data?: Array<{
+    month: string;
+    registrations: number;
+    activations: number;
+  }>;
+}
+
+const GrowthChart: React.FC<GrowthChartProps> = ({ data }) => {
+  // Use provided data or fallback to empty data
+  const chartData = data || [];
+
+  if (chartData.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-gray-400">
+        <div className="text-center">
+          <BarChart3 className="h-12 w-12 mx-auto mb-2 opacity-50" />
+          <p>No growth data available</p>
+        </div>
+      </div>
+    );
+  }
+
+  const months = chartData.map(d => d.month);
+  const registrations = chartData.map(d => d.registrations);
+  const activations = chartData.map(d => d.activations);
+
   const width = 500;
   const height = 250;
   const padding = 40;
-  const stepX = (width - padding * 2) / (months.length - 1);
-  const maxVal = Math.max(...registrations, ...activations);
-  
+  const stepX = (width - padding * 2) / Math.max(months.length - 1, 1);
+  const maxVal = Math.max(...registrations, ...activations, 1); // Ensure maxVal is at least 1
+
   const scaleY = (value: number) => {
     return padding + (height - padding * 2) * (1 - value / maxVal);
   };

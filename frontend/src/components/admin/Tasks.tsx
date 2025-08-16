@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 // import { Textarea } from '@/components/ui/textarea';
 
-const BACKEND_URL = 'http://127.0.0.1:5000';
+const BACKEND_URL = 'http://127.0.0.1:5001';
 
 interface Task {
   id: string;
@@ -62,69 +62,7 @@ const Tasks: React.FC<{ refreshUser: () => Promise<void> }> = ({ refreshUser }) 
     status: 'active' as 'active' | 'draft'
   });
 
-  // Sample data - similar to ambassador portal tasks
-  const sampleTasks: Task[] = [
-    {
-      id: 'task_001',
-      title: 'Social Media Campaign - Week 3',
-      description: 'Create and share 5 posts about our latest product features across Instagram, LinkedIn, and Twitter. Include proper hashtags and tag the company.',
-      day: 15,
-      points: 150,
-      status: 'active',
-      created_by: 'admin@test.com',
-      created_at: '2024-01-10'
-    },
-    {
-      id: 'task_002',
-      title: 'Campus Event Organization',
-      description: 'Organize a tech talk or workshop on campus. Document the event with photos and attendance numbers.',
-      day: 20,
-      points: 200,
-      status: 'active',
-      created_by: 'admin@test.com',
-      created_at: '2024-01-12'
-    },
-    {
-      id: 'task_003',
-      title: 'Product Feedback Collection',
-      description: 'Collect feedback from 10 students about our mobile app. Use the provided survey form.',
-      day: 10,
-      points: 100,
-      status: 'active',
-      created_by: 'admin@test.com',
-      created_at: '2024-01-05'
-    },
-    {
-      id: 'task_004',
-      title: 'Referral Program Launch',
-      description: 'Promote the new referral program to your network and get at least 5 sign-ups.',
-      day: 25,
-      points: 250,
-      status: 'draft',
-      created_by: 'admin@test.com',
-      created_at: '2024-01-08'
-    },
-    {
-      id: 'task_005',
-      title: 'LinkedIn Content Creation',
-      description: 'Write and publish 3 professional posts on LinkedIn about career opportunities in tech.',
-      day: 5,
-      points: 120,
-      status: 'active',
-      created_by: 'admin@test.com',
-      created_at: '2024-01-15'
-    },
-    {
-      id: 'task_006',
-      title: 'Student Survey Distribution',
-      description: 'Distribute and collect responses for the student satisfaction survey in your college.',
-      day: 12,
-      points: 180,
-      status: 'active',
-      created_by: 'admin@test.com',
-      created_at: '2024-01-18'
-    }
-  ];
+  // Remove sample data - will fetch from backend
 
   useEffect(() => {
     fetchTasks();
@@ -135,6 +73,14 @@ const Tasks: React.FC<{ refreshUser: () => Promise<void> }> = ({ refreshUser }) 
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
+
+      if (!token) {
+        console.error('No authentication token found');
+        setTasks([]);
+        setLoading(false);
+        return;
+      }
+
       const headers = {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -147,12 +93,12 @@ const Tasks: React.FC<{ refreshUser: () => Promise<void> }> = ({ refreshUser }) 
         console.log('Fetched real tasks:', realTasks);
         setTasks(realTasks);
       } else {
-        console.log('API failed, using sample data');
-        setTasks(sampleTasks);
+        console.error('Failed to fetch tasks:', response.status);
+        setTasks([]);
       }
     } catch (error) {
       console.error('Error fetching tasks:', error);
-      setTasks(sampleTasks);
+      setTasks([]);
     } finally {
       setLoading(false);
     }
@@ -217,9 +163,10 @@ const Tasks: React.FC<{ refreshUser: () => Promise<void> }> = ({ refreshUser }) 
       });
 
       if (response.ok) {
-        const newTask = await response.json();
-        setTasks([...tasks, newTask]);
-        console.log('Task created successfully:', newTask);
+        const result = await response.json();
+        console.log('Task created successfully:', result);
+        // Refresh tasks list to get the new task with proper ID
+        await fetchTasks();
       } else {
         // Fallback to local creation
         const newTask: Task = {
@@ -273,9 +220,10 @@ const Tasks: React.FC<{ refreshUser: () => Promise<void> }> = ({ refreshUser }) 
       });
 
       if (response.ok) {
-        const updatedTask = await response.json();
-        setTasks(tasks.map(t => t.id === editingTask.id ? updatedTask : t));
-        console.log('Task updated successfully:', updatedTask);
+        const result = await response.json();
+        console.log('Task updated successfully:', result);
+        // Refresh tasks list to get updated data
+        await fetchTasks();
       } else {
         // Fallback to local update
         const updatedTask: Task = {

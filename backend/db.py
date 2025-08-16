@@ -49,8 +49,9 @@ database = Database(DATABASE_URL)
 async def init_db():
     """Initialize PostgreSQL database and create tables"""
     try:
-        # Connect to database
-        await database.connect()
+        # Connect to database with timeout
+        import asyncio
+        await asyncio.wait_for(database.connect(), timeout=30.0)
         print(f"Successfully connected to PostgreSQL at {DATABASE_URL}")
 
         # Create all tables
@@ -70,6 +71,118 @@ async def init_db():
                     END IF;
                 END $$;
             """))
+
+            # Check if file_type column exists in submission_files and add it if missing
+            await conn.execute(text("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'submission_files' AND column_name = 'file_type'
+                    ) THEN
+                        ALTER TABLE submission_files ADD COLUMN file_type VARCHAR;
+                    END IF;
+                END $$;
+            """))
+
+            # Fix UUID column types if they are currently VARCHAR - handle foreign keys carefully
+            # Temporarily commented out to debug startup issues
+            # await conn.execute(text("""
+            #     DO $$
+            #     BEGIN
+            #         -- Drop foreign key constraints first
+            #         IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'submissions_user_id_fkey') THEN
+            #             ALTER TABLE submissions DROP CONSTRAINT submissions_user_id_fkey;
+            #         END IF;
+            #         IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'submissions_task_id_fkey') THEN
+            #             ALTER TABLE submissions DROP CONSTRAINT submissions_task_id_fkey;
+            #         END IF;
+            #         IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'submission_files_submission_id_fkey') THEN
+            #             ALTER TABLE submission_files DROP CONSTRAINT submission_files_submission_id_fkey;
+            #         END IF;
+            #         IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'analytics_user_id_fkey') THEN
+            #             ALTER TABLE analytics DROP CONSTRAINT analytics_user_id_fkey;
+            #         END IF;
+
+            #         -- Fix users table ID column
+            #         IF EXISTS (
+            #             SELECT 1 FROM information_schema.columns
+            #             WHERE table_name = 'users' AND column_name = 'id' AND data_type = 'character varying'
+            #         ) THEN
+            #             ALTER TABLE users ALTER COLUMN id TYPE UUID USING id::UUID;
+            #         END IF;
+
+            #         -- Fix tasks table ID column
+            #         IF EXISTS (
+            #             SELECT 1 FROM information_schema.columns
+            #             WHERE table_name = 'tasks' AND column_name = 'id' AND data_type = 'character varying'
+            #         ) THEN
+            #             ALTER TABLE tasks ALTER COLUMN id TYPE UUID USING id::UUID;
+            #         END IF;
+
+            #         -- Fix submissions table columns
+            #         IF EXISTS (
+            #             SELECT 1 FROM information_schema.columns
+            #             WHERE table_name = 'submissions' AND column_name = 'user_id' AND data_type = 'character varying'
+            #         ) THEN
+            #             ALTER TABLE submissions ALTER COLUMN user_id TYPE UUID USING user_id::UUID;
+            #         END IF;
+            #         IF EXISTS (
+            #             SELECT 1 FROM information_schema.columns
+            #             WHERE table_name = 'submissions' AND column_name = 'task_id' AND data_type = 'character varying'
+            #         ) THEN
+            #             ALTER TABLE submissions ALTER COLUMN task_id TYPE UUID USING task_id::UUID;
+            #         END IF;
+            #         IF EXISTS (
+            #             SELECT 1 FROM information_schema.columns
+            #             WHERE table_name = 'submissions' AND column_name = 'id' AND data_type = 'character varying'
+            #         ) THEN
+            #             ALTER TABLE submissions ALTER COLUMN id TYPE UUID USING id::UUID;
+            #         END IF;
+
+            #         -- Fix submission_files table columns
+            #         IF EXISTS (
+            #             SELECT 1 FROM information_schema.columns
+            #             WHERE table_name = 'submission_files' AND column_name = 'submission_id' AND data_type = 'character varying'
+            #         ) THEN
+            #             ALTER TABLE submission_files ALTER COLUMN submission_id TYPE UUID USING submission_id::UUID;
+            #         END IF;
+            #         IF EXISTS (
+            #             SELECT 1 FROM information_schema.columns
+            #             WHERE table_name = 'submission_files' AND column_name = 'id' AND data_type = 'character varying'
+            #         ) THEN
+            #             ALTER TABLE submission_files ALTER COLUMN id TYPE UUID USING id::UUID;
+            #         END IF;
+
+            #         -- Fix analytics table columns
+            #         IF EXISTS (
+            #             SELECT 1 FROM information_schema.columns
+            #             WHERE table_name = 'analytics' AND column_name = 'user_id' AND data_type = 'character varying'
+            #         ) THEN
+            #             ALTER TABLE analytics ALTER COLUMN user_id TYPE UUID USING user_id::UUID;
+            #         END IF;
+            #         IF EXISTS (
+            #             SELECT 1 FROM information_schema.columns
+            #             WHERE table_name = 'analytics' AND column_name = 'id' AND data_type = 'character varying'
+            #         ) THEN
+            #             ALTER TABLE analytics ALTER COLUMN id TYPE UUID USING id::UUID;
+            #         END IF;
+
+            #         -- Recreate foreign key constraints
+            #         IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'submissions_user_id_fkey') THEN
+            #             ALTER TABLE submissions ADD CONSTRAINT submissions_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id);
+            #         END IF;
+            #         IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'submissions_task_id_fkey') THEN
+            #             ALTER TABLE submissions ADD CONSTRAINT submissions_task_id_fkey FOREIGN KEY (task_id) REFERENCES tasks(id);
+            #         END IF;
+            #         IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'submission_files_submission_id_fkey') THEN
+            #             ALTER TABLE submission_files ADD CONSTRAINT submission_files_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES submissions(id);
+            #         END IF;
+            #         IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'analytics_user_id_fkey') THEN
+            #             ALTER TABLE analytics ADD CONSTRAINT analytics_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id);
+            #         END IF;
+            #     END $$;
+            # """))
 
         print("Database initialization completed successfully!")
         return True

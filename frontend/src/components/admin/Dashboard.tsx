@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-const BACKEND_URL = 'http://127.0.0.1:5000';
+const BACKEND_URL = 'http://127.0.0.1:5001';
 
 interface AdminDashboardStats {
   total_ambassadors: number;
@@ -64,111 +64,11 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
   const [selectedAmbassador, setSelectedAmbassador] = useState<Ambassador | null>(null);
   const [showAmbassadorModal, setShowAmbassadorModal] = useState(false);
 
-  // Sample data for demonstration
-  const sampleStats: AdminDashboardStats = {
-    total_ambassadors: 145,
-    active_ambassadors: 128,
-    total_tasks_assigned: 2175,
-    tasks_completed_today: 89,
-    total_tasks_submitted: 1847,
-    tasks_submitted_this_week: 456,
-    total_points_distributed: 125600,
-    pending_approvals: 23,
-    system_health: 96
-  };
+  // Remove sample data - will be fetched from backend
 
-  const sampleAmbassadors: Ambassador[] = [
-    {
-      id: 'amb_001',
-      name: 'Ananya Sharma',
-      email: 'ananya@college.edu',
-      college: 'IIT Delhi',
-      group_leader_name: 'Dr. Rajesh Kumar',
-      status: 'active',
-      tasks_completed: 45,
-      total_points: 2250,
-      rank: 1,
-      last_active: '2 hours ago'
-    },
-    {
-      id: 'amb_002',
-      name: 'Rahul Kumar',
-      email: 'rahul@college.edu',
-      college: 'IIT Bombay',
-      group_leader_name: 'Prof. Meera Singh',
-      status: 'active',
-      tasks_completed: 42,
-      total_points: 2100,
-      rank: 2,
-      last_active: '5 hours ago'
-    },
-    {
-      id: 'amb_003',
-      name: 'Priya Patel',
-      email: 'priya@college.edu',
-      college: 'IIT Madras',
-      group_leader_name: 'Dr. Amit Sharma',
-      status: 'inactive',
-      tasks_completed: 15,
-      total_points: 750,
-      rank: 45,
-      last_active: '2 days ago'
-    },
-    {
-      id: 'amb_004',
-      name: 'Arjun Singh',
-      email: 'arjun@college.edu',
-      college: 'IIT Kanpur',
-      group_leader_name: 'Prof. Sunita Patel',
-      status: 'active',
-      tasks_completed: 38,
-      total_points: 1900,
-      rank: 3,
-      last_active: '1 hour ago'
-    },
-    {
-      id: 'amb_005',
-      name: 'Sneha Reddy',
-      email: 'sneha@college.edu',
-      college: 'IIT Hyderabad',
-      group_leader_name: 'Dr. Kavya Nair',
-      status: 'suspended',
-      tasks_completed: 8,
-      total_points: 400,
-      rank: 78,
-      last_active: '1 week ago'
-    }
-  ];
 
-  const sampleTasks: TaskAssignment[] = [
-    {
-      id: 'task_001',
-      title: 'Social Media Campaign - Week 3',
-      assigned_to: 145,
-      completed_by: 89,
-      deadline: '2024-01-15',
-      priority: 'high',
-      status: 'active'
-    },
-    {
-      id: 'task_002',
-      title: 'Campus Event Promotion',
-      assigned_to: 120,
-      completed_by: 95,
-      deadline: '2024-01-18',
-      priority: 'medium',
-      status: 'active'
-    },
-    {
-      id: 'task_003',
-      title: 'Product Feedback Collection',
-      assigned_to: 100,
-      completed_by: 100,
-      deadline: '2024-01-10',
-      priority: 'low',
-      status: 'completed'
-    }
-  ];
+
+
 
   useEffect(() => {
     const fetchAdminData = async () => {
@@ -176,9 +76,6 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
         const token = localStorage.getItem('token');
         if (!token) {
           console.error('No authentication token found');
-          setDashboardStats(sampleStats);
-          setAmbassadors(sampleAmbassadors);
-          setRecentTasks(sampleTasks);
           setLoading(false);
           return;
         }
@@ -188,86 +85,54 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
           'Content-Type': 'application/json',
         };
 
-        // Fetch ambassadors data first
+        // Fetch dashboard stats directly from backend
+        const statsResponse = await fetch(`${BACKEND_URL}/api/admin/dashboard-stats`, { headers });
+        if (statsResponse.ok) {
+          const stats = await statsResponse.json();
+          setDashboardStats(stats);
+          console.log('Fetched dashboard stats:', stats);
+        }
+
+        // Fetch ambassadors data
         const ambassadorsResponse = await fetch(`${BACKEND_URL}/api/admin/ambassadors`, { headers });
+        if (ambassadorsResponse.ok) {
+          const ambassadorsData = await ambassadorsResponse.json();
 
-        if (!ambassadorsResponse.ok) {
-          throw new Error(`Ambassadors API failed: ${ambassadorsResponse.status}`);
+          // Transform and take top 5 ambassadors for display
+          const transformedAmbassadors = ambassadorsData
+            .slice(0, 5)
+            .map((amb: any, index: number) => ({
+              id: amb.id || amb.user_id,
+              name: amb.name,
+              email: amb.email,
+              college: amb.college,
+              group_leader_name: amb.group_leader_name || 'No Group Leader',
+              status: amb.status || 'active',
+              tasks_completed: amb.tasks_completed || 0,
+              total_points: amb.total_points || 0,
+              rank: index + 1,
+              last_active: amb.last_login || amb.registration_date || 'Recently'
+            }));
+
+          setAmbassadors(transformedAmbassadors);
+          console.log('Fetched ambassadors data:', transformedAmbassadors);
+          console.log('Task completion counts:', transformedAmbassadors.map((amb: Ambassador) => ({
+            name: amb.name,
+            tasks_completed: amb.tasks_completed,
+            raw_data: amb
+          })));
         }
 
-        const ambassadorsData = await ambassadorsResponse.json();
-        console.log('Fetched ambassadors data:', ambassadorsData);
-
-        // Fetch submissions data for more accurate stats
-        const submissionsResponse = await fetch(`${BACKEND_URL}/api/admin/submissions`, { headers });
-        let submissionsData = [];
-
-        if (submissionsResponse.ok) {
-          submissionsData = await submissionsResponse.json();
-          console.log('Fetched submissions data:', submissionsData);
-        }
-
-        // Calculate real stats from the data
-        const activeAmbassadors = ambassadorsData.filter((amb: any) => amb.status === 'active' || !amb.status);
-        const totalPoints = ambassadorsData.reduce((sum: number, amb: any) => sum + (amb.total_points || 0), 0);
-        const totalSubmissions = submissionsData.length;
-
-        // Calculate today's submissions (last 24 hours)
-        const today = new Date();
-        const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-        const todaySubmissions = submissionsData.filter((sub: any) => {
-          const subDate = new Date(sub.submission_date || sub.created_at);
-          return subDate >= yesterday;
-        });
-
-        // Calculate this week's submissions
-        const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const weekSubmissions = submissionsData.filter((sub: any) => {
-          const subDate = new Date(sub.submission_date || sub.created_at);
-          return subDate >= weekAgo;
-        });
-
-        const transformedStats: AdminDashboardStats = {
-          total_ambassadors: ambassadorsData.length,
-          active_ambassadors: activeAmbassadors.length,
-          total_tasks_assigned: ambassadorsData.length * 30, // Assuming 30 days campaign
-          tasks_completed_today: todaySubmissions.length,
-          total_tasks_submitted: totalSubmissions,
-          tasks_submitted_this_week: weekSubmissions.length,
-          total_points_distributed: totalPoints,
-          pending_approvals: submissionsData.filter((sub: any) => sub.status_text === 'pending' || sub.status_text === 'submitted').length,
-          system_health: 98 // Static for now
-        };
-
-        // Transform ambassadors data - get top 5 by points
-        const sortedAmbassadors = ambassadorsData
-          .sort((a: any, b: any) => (b.total_points || 0) - (a.total_points || 0))
-          .slice(0, 5);
-
-        const transformedAmbassadors = sortedAmbassadors.map((amb: any, index: number) => ({
-          id: amb.id || amb.user_id,
-          name: amb.name,
-          email: amb.email,
-          college: amb.college,
-          group_leader_name: amb.group_leader_name || 'No Group Leader',
-          status: amb.status === 'active' ? 'active' : (amb.status === 'inactive' ? 'inactive' : 'active'),
-          tasks_completed: amb.tasks_completed || 0, // Use real tasks_completed from API
-          total_points: amb.total_points || 0,
-          rank: index + 1,
-          last_active: amb.last_login || amb.registration_date || 'Recently'
-        }));
-
-        setDashboardStats(transformedStats);
-        setAmbassadors(transformedAmbassadors);
-        setRecentTasks(sampleTasks); // Keep sample tasks for now - would need task assignments API
+        // For now, set empty recent tasks - this would need a task assignments API
+        setRecentTasks([]);
 
         console.log('Dashboard data updated successfully');
       } catch (error) {
         console.error('Error fetching admin dashboard data:', error);
-        // Fallback to sample data on error
-        setDashboardStats(sampleStats);
-        setAmbassadors(sampleAmbassadors);
-        setRecentTasks(sampleTasks);
+        // Set empty data on error
+        setDashboardStats(null);
+        setAmbassadors([]);
+        setRecentTasks([]);
       } finally {
         setLoading(false);
       }
@@ -289,15 +154,14 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
       case 'suspend':
         if (confirm(`Are you sure you want to suspend ${ambassador.name}?`)) {
           try {
-            const response = await fetch(`${BACKEND_URL}/api/admin/suspend-user`, {
+            const response = await fetch(`${BACKEND_URL}/api/admin/ambassador/${ambassador.id}/action`, {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify({
-                user_id: ambassador.id,
-                status: 'suspended'
+                action: 'suspend'
               })
             });
 
@@ -318,15 +182,14 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
         break;
       case 'activate':
         try {
-          const response = await fetch(`${BACKEND_URL}/api/admin/activate-user`, {
+          const response = await fetch(`${BACKEND_URL}/api/admin/ambassador/${ambassador.id}/action`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              user_id: ambassador.id,
-              status: 'active'
+              action: 'activate'
             })
           });
 
@@ -417,7 +280,7 @@ const Dashboard: React.FC<{ user: any; refreshUser: () => Promise<void> }> = ({ 
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-xs font-medium">Tasks Today</p>
-                  <p className="text-xl font-bold text-white mt-1">{dashboardStats?.tasks_completed_today || 0}</p>
+                  <p className="text-xl font-bold text-white mt-1">{dashboardStats?.tasks_completed_today|| 0}</p>
                   <p className="text-green-400 text-xs mt-1">+15% from yesterday</p>
                 </div>
                 <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">

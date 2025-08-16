@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import * as XLSX from 'xlsx';
 
-const BACKEND_URL = 'http://127.0.0.1:5000';
+const BACKEND_URL = 'http://127.0.0.1:5001';
 
 interface Ambassador {
   id: string;
@@ -107,7 +107,11 @@ const Reports: React.FC = () => {
 
       if (!token) {
         console.error('No authentication token found');
-        generateSampleData();
+        setMetrics({ total_ambassadors: 0, active_ambassadors: 0, total_submissions: 0, total_points: 0 });
+        setAmbassadors([]);
+        setGroupLeaders([]);
+        setSubmissions([]);
+        setFilteredSubmissions([]);
         return;
       }
 
@@ -117,7 +121,7 @@ const Reports: React.FC = () => {
       };
 
       // Fetch ambassadors
-      const ambassadorsResponse = await fetch(`${BACKEND_URL}/api/admin/ambassadors`, { headers });
+      const ambassadorsResponse = await fetch(`${BACKEND_URL}/api/admin/reports/ambassadors`, { headers });
       if (!ambassadorsResponse.ok) {
         throw new Error(`Ambassadors API failed: ${ambassadorsResponse.status}`);
       }
@@ -160,7 +164,12 @@ const Reports: React.FC = () => {
       console.log('Reports data fetched successfully');
     } catch (error) {
       console.error('Error fetching real data:', error);
-      generateSampleData();
+      // Set empty data on error
+      setMetrics({ total_ambassadors: 0, active_ambassadors: 0, total_submissions: 0, total_points: 0 });
+      setAmbassadors([]);
+      setGroupLeaders([]);
+      setSubmissions([]);
+      setFilteredSubmissions([]);
     } finally {
       setLoading(false);
     }
@@ -188,7 +197,7 @@ const Reports: React.FC = () => {
         params.append('end_date', dateRange.end);
       }
 
-      const submissionsResponse = await fetch(`${BACKEND_URL}/api/admin/submissions?${params}`, { headers });
+      const submissionsResponse = await fetch(`${BACKEND_URL}/api/admin/reports/submissions?${params}`, { headers });
       if (!submissionsResponse.ok) {
         throw new Error(`Submissions API failed: ${submissionsResponse.status}`);
       }
@@ -211,19 +220,26 @@ const Reports: React.FC = () => {
         people_connected: sub.people_connected || 0,
         points_earned: sub.points_earned || sub.points || 0,
         submission_date: sub.submission_date || sub.created_at || sub.submitted_at,
-        is_completed: sub.is_completed !== false
+        is_completed: sub.is_completed !== false,
+        image_url: sub.image_url || sub.proof_image || null,
+        submission_text: sub.submission_text || sub.status_text
       }));
 
       setSubmissions(transformedSubmissions);
       setFilteredSubmissions(transformedSubmissions);
 
+      // Filter ambassadors by selected group leader
+      const filteredAmbassadors = selectedGroupLeader === 'all'
+        ? ambassadors
+        : ambassadors.filter(amb => amb.group_leader_name === selectedGroupLeader);
+
       // Update metrics based on real data
       const totalPoints = transformedSubmissions.reduce((sum, sub) => sum + sub.points_earned, 0);
       const totalPeopleConnected = transformedSubmissions.reduce((sum, sub) => sum + sub.people_connected, 0);
-      const activeAmbassadors = ambassadors.filter(amb => amb.status === 'active');
+      const activeAmbassadors = filteredAmbassadors.filter(amb => amb.status === 'active');
 
       setMetrics({
-        total_ambassadors: ambassadors.length,
+        total_ambassadors: filteredAmbassadors.length,
         active_ambassadors: activeAmbassadors.length,
         total_submissions: transformedSubmissions.length,
         total_points: totalPoints
@@ -233,15 +249,15 @@ const Reports: React.FC = () => {
       const monthlyProgress = generateMonthlyProgress(transformedSubmissions);
 
       setReportData({
-        totalAmbassadors: ambassadors.length,
+        totalAmbassadors: filteredAmbassadors.length,
         totalTasks: transformedSubmissions.length,
         totalPoints: totalPoints,
         totalPeopleConnected: totalPeopleConnected,
         averageTaskTime: '2.5 hours', // Static for now
-        completionRate: ambassadors.length > 0 ? (transformedSubmissions.length / (ambassadors.length * 30)) * 100 : 0,
+        completionRate: filteredAmbassadors.length > 0 ? (transformedSubmissions.length / (filteredAmbassadors.length * 30)) * 100 : 0,
         submissions: transformedSubmissions,
         monthlyProgress: monthlyProgress,
-        ambassadors: ambassadors
+        ambassadors: filteredAmbassadors
       });
 
       console.log('Submissions data processed successfully');
@@ -273,378 +289,9 @@ const Reports: React.FC = () => {
       .slice(-6); // Last 6 months
   };
 
-  // Sample data for demonstration
-  const generateSampleData = () => {
-    const sampleAmbassadors: Ambassador[] = [
-      {
-        id: '1',
-        name: 'Ananya Sharma',
-        email: 'ananya@college.edu',
-        college: 'Delhi University',
-        group_leader_name: 'Dr. Rajesh Kumar',
-        total_points: 2850,
-        rank_position: 1,
-        current_day: 15,
-        total_referrals: 12,
-        events_hosted: 3,
-        students_reached: 145,
-        revenue_generated: 25000,
-        social_media_posts: 28,
-        engagement_rate: 92.5,
-        followers_growth: 180,
-        campaign_days: 15,
-        status: 'active',
-        last_activity: '2024-01-15',
-        join_date: '2024-01-01'
-      },
-      {
-        id: '2',
-        name: 'Rahul Kumar',
-        email: 'rahul@college.edu',
-        college: 'Mumbai University',
-        group_leader_name: 'Prof. Meera Singh',
-        total_points: 2650,
-        rank_position: 2,
-        current_day: 14,
-        total_referrals: 10,
-        events_hosted: 2,
-        students_reached: 128,
-        revenue_generated: 22000,
-        social_media_posts: 25,
-        engagement_rate: 88.3,
-        followers_growth: 165,
-        campaign_days: 14,
-        status: 'active',
-        last_activity: '2024-01-14',
-        join_date: '2024-01-02'
-      },
-      {
-        id: '3',
-        name: 'Priya Patel',
-        email: 'priya@college.edu',
-        college: 'Gujarat University',
-        group_leader_name: 'Dr. Rajesh Kumar',
-        total_points: 2400,
-        rank_position: 3,
-        current_day: 13,
-        total_referrals: 8,
-        events_hosted: 2,
-        students_reached: 112,
-        revenue_generated: 18500,
-        social_media_posts: 22,
-        engagement_rate: 85.7,
-        followers_growth: 142,
-        campaign_days: 13,
-        status: 'active',
-        last_activity: '2024-01-13',
-        join_date: '2024-01-03'
-      },
-      {
-        id: '4',
-        name: 'Arjun Singh',
-        email: 'arjun@college.edu',
-        college: 'Bangalore University',
-        group_leader_name: 'Prof. Meera Singh',
-        total_points: 2200,
-        rank_position: 4,
-        current_day: 12,
-        total_referrals: 7,
-        events_hosted: 1,
-        students_reached: 98,
-        revenue_generated: 16000,
-        social_media_posts: 20,
-        engagement_rate: 82.1,
-        followers_growth: 125,
-        campaign_days: 12,
-        status: 'active',
-        last_activity: '2024-01-12',
-        join_date: '2024-01-04'
-      },
-      {
-        id: '5',
-        name: 'Sneha Reddy',
-        email: 'sneha@college.edu',
-        college: 'Hyderabad University',
-        group_leader_name: 'Dr. Amit Verma',
-        total_points: 2000,
-        rank_position: 5,
-        current_day: 11,
-        total_referrals: 6,
-        events_hosted: 1,
-        students_reached: 85,
-        revenue_generated: 14500,
-        social_media_posts: 18,
-        engagement_rate: 79.4,
-        followers_growth: 108,
-        campaign_days: 11,
-        status: 'active',
-        last_activity: '2024-01-11',
-        join_date: '2024-01-05'
-      },
-      {
-        id: '6',
-        name: 'Vikram Joshi',
-        email: 'vikram@college.edu',
-        college: 'Pune University',
-        group_leader_name: 'Dr. Rajesh Kumar',
-        total_points: 1850,
-        rank_position: 6,
-        current_day: 10,
-        total_referrals: 5,
-        events_hosted: 1,
-        students_reached: 72,
-        revenue_generated: 12500,
-        social_media_posts: 16,
-        engagement_rate: 76.8,
-        followers_growth: 95,
-        campaign_days: 10,
-        status: 'active',
-        last_activity: '2024-01-10',
-        join_date: '2024-01-06'
-      },
-      {
-        id: '7',
-        name: 'Kavya Nair',
-        email: 'kavya@college.edu',
-        college: 'Kerala University',
-        group_leader_name: 'Prof. Meera Singh',
-        total_points: 1650,
-        rank_position: 7,
-        current_day: 9,
-        total_referrals: 4,
-        events_hosted: 1,
-        students_reached: 58,
-        revenue_generated: 10500,
-        social_media_posts: 14,
-        engagement_rate: 73.2,
-        followers_growth: 82,
-        campaign_days: 9,
-        status: 'active',
-        last_activity: '2024-01-09',
-        join_date: '2024-01-07'
-      },
-      {
-        id: '8',
-        name: 'Rohit Gupta',
-        email: 'rohit@college.edu',
-        college: 'Jaipur University',
-        group_leader_name: 'Dr. Amit Verma',
-        total_points: 1450,
-        rank_position: 8,
-        current_day: 8,
-        total_referrals: 3,
-        events_hosted: 0,
-        students_reached: 45,
-        revenue_generated: 8500,
-        social_media_posts: 12,
-        engagement_rate: 69.5,
-        followers_growth: 68,
-        campaign_days: 8,
-        status: 'inactive',
-        last_activity: '2024-01-08',
-        join_date: '2024-01-08'
-      }
-    ];
 
-    const sampleGroupLeaders = ['Dr. Rajesh Kumar', 'Prof. Meera Singh', 'Dr. Amit Verma'];
 
-    return { ambassadors: sampleAmbassadors, groupLeaders: sampleGroupLeaders };
-  };
 
-  // Fetch data from backend with fallback to sample data
-  const fetchReportData = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-
-      let ambassadors: Ambassador[] = [];
-      let leaders: string[] = [];
-
-      if (token) {
-        try {
-          // Try to fetch from backend
-          const ambassadorsResponse = await fetch(`${BACKEND_URL}/api/admin/ambassadors`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-
-          const groupLeadersResponse = await fetch(`${BACKEND_URL}/api/admin/group-leaders`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-
-          if (ambassadorsResponse.ok && groupLeadersResponse.ok) {
-            ambassadors = await ambassadorsResponse.json();
-            leaders = await groupLeadersResponse.json();
-          } else {
-            throw new Error('API calls failed');
-          }
-        } catch (apiError) {
-          console.log('API calls failed, using sample data:', apiError);
-          const sampleData = generateSampleData();
-          ambassadors = sampleData.ambassadors;
-          leaders = sampleData.groupLeaders;
-        }
-      } else {
-        // No token, use sample data
-        const sampleData = generateSampleData();
-        ambassadors = sampleData.ambassadors;
-        leaders = sampleData.groupLeaders;
-      }
-
-      setGroupLeaders(leaders);
-
-      // Filter ambassadors by selected group leader
-      const filteredAmbassadors = selectedGroupLeader === 'all'
-        ? ambassadors
-        : ambassadors.filter(amb => amb.group_leader_name === selectedGroupLeader);
-
-      // Calculate metrics
-      const totalTasks = filteredAmbassadors.reduce((sum, amb) => sum + amb.campaign_days, 0);
-      const totalPoints = filteredAmbassadors.reduce((sum, amb) => sum + amb.total_points, 0);
-      const totalPeopleConnected = filteredAmbassadors.reduce((sum, amb) => sum + amb.students_reached, 0);
-
-      // Create mock submissions data based on ambassador data
-      const submissions: TaskSubmission[] = [];
-      filteredAmbassadors.forEach(ambassador => {
-        // Create mock submissions for each ambassador based on their campaign days
-        for (let day = 1; day <= ambassador.campaign_days; day++) {
-          const submissionDate = new Date();
-          submissionDate.setDate(submissionDate.getDate() - (ambassador.campaign_days - day));
-
-          submissions.push({
-            id: `sub_${ambassador.id}_${day}`,
-            task_id: `task_${day}`,
-            task_title: `Day ${day} Task`,
-            task_day: day,
-            user_id: ambassador.id,
-            user_name: ambassador.name,
-            user_email: ambassador.email,
-            user_college: ambassador.college,
-            group_leader_name: ambassador.group_leader_name,
-            status_text: `Task completion for day ${day} by ${ambassador.name}`,
-            people_connected: Math.floor(ambassador.students_reached / Math.max(ambassador.campaign_days, 1)),
-            points_earned: Math.floor(ambassador.total_points / Math.max(ambassador.campaign_days, 1)),
-            submission_date: submissionDate.toISOString(),
-            is_completed: true
-          });
-        }
-      });
-
-      // Calculate monthly progress
-      const monthlyProgress: { month: string; tasks: number; points: number }[] = [];
-      const monthlyData: { [key: string]: { tasks: number; points: number } } = {};
-
-      submissions.forEach(sub => {
-        const date = new Date(sub.submission_date);
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-
-        if (!monthlyData[monthKey]) {
-          monthlyData[monthKey] = { tasks: 0, points: 0 };
-        }
-
-        monthlyData[monthKey].tasks += 1;
-        monthlyData[monthKey].points += sub.points_earned;
-      });
-
-      Object.entries(monthlyData).forEach(([month, data]) => {
-        monthlyProgress.push({
-          month,
-          tasks: data.tasks,
-          points: data.points
-        });
-      });
-
-      const processedReportData: ReportData = {
-        totalAmbassadors: filteredAmbassadors.length,
-        totalTasks: totalTasks,
-        totalPoints: totalPoints,
-        totalPeopleConnected: totalPeopleConnected,
-        averageTaskTime: '2.5 hours',
-        completionRate: 100,
-        submissions: submissions,
-        monthlyProgress: monthlyProgress.sort((a, b) => a.month.localeCompare(b.month)),
-        ambassadors: filteredAmbassadors
-      };
-
-      setReportData(processedReportData);
-
-      // Set metrics
-      setMetrics({
-        total_ambassadors: ambassadors.length,
-        active_ambassadors: ambassadors.filter(amb => amb.status === 'active').length,
-        total_submissions: submissions.length,
-        total_points: ambassadors.reduce((sum, amb) => sum + amb.total_points, 0)
-      });
-    } catch (error) {
-      console.error('Error fetching report data:', error);
-      // Use sample data as fallback
-      const sampleData = generateSampleData();
-      const ambassadors = sampleData.ambassadors;
-      const leaders = sampleData.groupLeaders;
-
-      setGroupLeaders(leaders);
-
-      const filteredAmbassadors = selectedGroupLeader === 'all'
-        ? ambassadors
-        : ambassadors.filter(amb => amb.group_leader_name === selectedGroupLeader);
-
-      const totalTasks = filteredAmbassadors.reduce((sum, amb) => sum + amb.campaign_days, 0);
-      const totalPoints = filteredAmbassadors.reduce((sum, amb) => sum + amb.total_points, 0);
-      const totalPeopleConnected = filteredAmbassadors.reduce((sum, amb) => sum + amb.students_reached, 0);
-
-      const submissions: TaskSubmission[] = [];
-      filteredAmbassadors.forEach(ambassador => {
-        for (let day = 1; day <= ambassador.campaign_days; day++) {
-          const submissionDate = new Date();
-          submissionDate.setDate(submissionDate.getDate() - (ambassador.campaign_days - day));
-
-          submissions.push({
-            id: `sub_${ambassador.id}_${day}`,
-            task_id: `task_${day}`,
-            task_title: `Day ${day} Task`,
-            task_day: day,
-            user_id: ambassador.id,
-            user_name: ambassador.name,
-            user_email: ambassador.email,
-            user_college: ambassador.college,
-            group_leader_name: ambassador.group_leader_name,
-            status_text: `Task completion for day ${day} by ${ambassador.name}`,
-            people_connected: Math.floor(ambassador.students_reached / Math.max(ambassador.campaign_days, 1)),
-            points_earned: Math.floor(ambassador.total_points / Math.max(ambassador.campaign_days, 1)),
-            submission_date: submissionDate.toISOString(),
-            is_completed: true
-          });
-        }
-      });
-
-      const processedReportData: ReportData = {
-        totalAmbassadors: filteredAmbassadors.length,
-        totalTasks: totalTasks,
-        totalPoints: totalPoints,
-        totalPeopleConnected: totalPeopleConnected,
-        averageTaskTime: '2.5 hours',
-        completionRate: 100,
-        submissions: submissions,
-        monthlyProgress: [],
-        ambassadors: filteredAmbassadors
-      };
-
-      setReportData(processedReportData);
-      setMetrics({
-        total_ambassadors: ambassadors.length,
-        active_ambassadors: ambassadors.filter(amb => amb.status === 'active').length,
-        total_submissions: submissions.length,
-        total_points: ambassadors.reduce((sum, amb) => sum + amb.total_points, 0)
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
     fetchRealData();
@@ -689,83 +336,7 @@ const Reports: React.FC = () => {
 
 
 
-  const downloadExcelReport = () => {
-    if (!reportData) return;
 
-    const workbook = XLSX.utils.book_new();
-
-    // Summary Sheet
-    const summaryData = [
-      ['Ambassador Platform - Comprehensive Report', ''],
-      ['Generated on:', new Date().toLocaleDateString()],
-      ['Filter Applied:', selectedGroupLeader === 'all' ? 'All Group Leaders' : selectedGroupLeader],
-      ['Date Range:', dateRange.start && dateRange.end ? `${dateRange.start} to ${dateRange.end}` : 'All Time'],
-      [''],
-      ['Summary Statistics', ''],
-      ['Total Ambassadors', reportData.totalAmbassadors],
-      ['Total Tasks Completed', reportData.totalTasks],
-      ['Total Points Distributed', reportData.totalPoints],
-      ['Total People Connected', reportData.totalPeopleConnected],
-      ['Average Completion Rate', `${reportData.completionRate}%`],
-      ['Average Task Time', reportData.averageTaskTime]
-    ];
-
-    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
-
-    // Detailed Submissions Sheet
-    const submissionsData = [
-      ['Detailed Task Submissions', ''],
-      ['Ambassador', 'College', 'Group Leader', 'Task ID', 'Task Title', 'Priority', 'Submission Date', 'Submission Time', 'Completion Date', 'Completion Time', 'Points', 'People Connected', 'Status', 'Submission Text', 'Week of Year', 'Month', 'Quarter'],
-      ...filteredSubmissions.map(sub => {
-        const submissionDate = new Date(sub.submission_date);
-        const weekOfYear = Math.ceil((submissionDate.getTime() - new Date(submissionDate.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000));
-        const quarter = Math.ceil((submissionDate.getMonth() + 1) / 3);
-
-        return [
-          sub.user_name,
-          sub.user_college,
-          sub.group_leader_name,
-          sub.task_id,
-          sub.task_title,
-          'Medium',
-          submissionDate.toLocaleDateString(),
-          submissionDate.toLocaleTimeString(),
-          submissionDate.toLocaleDateString(),
-          submissionDate.toLocaleTimeString(),
-          sub.points_earned,
-          sub.people_connected || 0,
-          sub.is_completed ? 'Completed' : 'Pending',
-          sub.status_text,
-          weekOfYear,
-          submissionDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-          `Q${quarter} ${submissionDate.getFullYear()}`
-        ];
-      })
-    ];
-
-    const submissionsSheet = XLSX.utils.aoa_to_sheet(submissionsData);
-    XLSX.utils.book_append_sheet(workbook, submissionsSheet, 'Detailed Submissions');
-
-    // Generate and download file
-    const fileName = selectedGroupLeader === 'all'
-      ? `Admin_Ambassador_Report_All_Groups_${new Date().toISOString().split('T')[0]}.xlsx`
-      : `Admin_Ambassador_Report_${selectedGroupLeader.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
-
-    XLSX.writeFile(workbook, fileName);
-  };
-
-  // Handle viewing user details
-  const handleViewUserDetails = (user: Ambassador) => {
-    setSelectedUser(user);
-
-    // Get all submissions for this user
-    const userSubmissions = filteredSubmissions.filter(sub =>
-      sub.user_id === user.id
-    );
-    setSelectedUserSubmissions(userSubmissions);
-    setShowUserSubmissionsModal(true);
-  };
 
 
 
@@ -787,7 +358,7 @@ const Reports: React.FC = () => {
       ['Total Tasks Completed', reportData.totalTasks],
       ['Total Points Earned', reportData.totalPoints],
       ['Total People Connected', reportData.totalPeopleConnected],
-      ['Average Task Time', reportData.averageTaskTime],
+      // ['Average Task Time', reportData.averageTaskTime],
       ['Completion Rate', `${reportData.completionRate}%`],
       ['', ''],
       ['Ambassador Overview', ''],
@@ -845,7 +416,7 @@ const Reports: React.FC = () => {
           submissionDate.toLocaleTimeString(),
           sub.points_earned,
           sub.people_connected || 0,
-          sub.is_completed ? 'Completed' : 'Pending',
+          // sub.is_completed ? 'Completed' : 'Pending',
           sub.status_text,
           weekOfYear,
           submissionDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
@@ -944,7 +515,7 @@ const Reports: React.FC = () => {
         new Date(sub.submission_date).toLocaleDateString(),
         sub.points_earned,
         sub.people_connected || 0,
-        sub.is_completed ? 'Completed' : 'Pending'
+        // sub.is_completed ? 'Completed' : 'Pending'
       ])
     ];
 
@@ -1325,7 +896,7 @@ const Reports: React.FC = () => {
                         <th className="text-left py-3 px-4 text-gray-400 font-medium">College</th>
                         <th className="text-left py-3 px-4 text-gray-400 font-medium">Group Leader</th>
                         <th className="text-center py-3 px-4 text-gray-400 font-medium">Total Tasks</th>
-                        <th className="text-center py-3 px-4 text-gray-400 font-medium">Completed</th>
+                        {/* <th className="text-center py-3 px-4 text-gray-400 font-medium">Completed</th> */}
                         <th className="text-center py-3 px-4 text-gray-400 font-medium">Total Points</th>
                         <th className="text-center py-3 px-4 text-gray-400 font-medium">People Connected</th>
                         <th className="text-center py-3 px-4 text-gray-400 font-medium">View Details</th>
@@ -1349,14 +920,14 @@ const Reports: React.FC = () => {
                               {userSummary.submissions.length}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-center">
-                            <div className="flex flex-col items-center">
+                          {/* <td className="py-3 px-4 text-center"> */}
+                            {/* <div className="flex flex-col items-center">
                               <span className="text-green-400 font-bold">{userSummary.completedTasks}</span>
                               {userSummary.pendingTasks > 0 && (
                                 <span className="text-yellow-400 text-xs">({userSummary.pendingTasks} pending)</span>
                               )}
-                            </div>
-                          </td>
+                            </div> */}
+                          {/* </td> */}
                           <td className="py-3 px-4 text-center">
                             <span className="text-yellow-400 font-bold">{userSummary.totalPoints}</span>
                           </td>
@@ -1514,7 +1085,7 @@ const Reports: React.FC = () => {
                     </div>
                     <p className="text-gray-400 text-sm">Total Points</p>
                   </div>
-                  <div className="bg-gray-800 rounded-lg p-4 text-center">
+                  {/* <div className="bg-gray-800 rounded-lg p-4 text-center">
                     <div className="text-2xl font-bold text-purple-400">
                       {selectedUserSubmissions.reduce((sum, sub) => sum + (sub.people_connected || 0), 0)}
                     </div>
@@ -1525,7 +1096,7 @@ const Reports: React.FC = () => {
                       {selectedUserSubmissions.filter(sub => sub.is_completed).length}
                     </div>
                     <p className="text-gray-400 text-sm">Completed Tasks</p>
-                  </div>
+                  </div> */}
                 </div>
 
                 {/* Detailed Submissions */}
@@ -1585,30 +1156,9 @@ const Reports: React.FC = () => {
                           <div>
                             <h6 className="text-gray-400 text-sm font-medium mb-2">Submitted Image</h6>
                             {submission.image_url ? (
-                              <div className="bg-gray-700 rounded-lg p-3">
-                                <img
-                                  src={submission.image_url}
-                                  alt={`Submission for ${submission.task_title}`}
-                                  className="w-full h-auto rounded-lg max-h-64 object-cover"
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                    const nextElement = e.currentTarget.nextElementSibling as HTMLElement;
-                                    if (nextElement) {
-                                      nextElement.style.display = 'block';
-                                    }
-                                  }}
-                                />
-                                <div className="hidden text-gray-400 text-center py-8">
-                                  <FileText className="h-12 w-12 mx-auto mb-2" />
-                                  <p>Image could not be loaded</p>
-                                  <p className="text-xs mt-1 break-all">{submission.image_url}</p>
-                                </div>
-                              </div>
+                              <img src={submission.image_url} alt="Submitted" className="max-h-40 rounded" />
                             ) : (
-                              <div className="bg-gray-700 rounded-lg p-8 text-center">
-                                <FileText className="h-12 w-12 mx-auto mb-2 text-gray-500" />
-                                <p className="text-gray-400 text-sm">No image submitted</p>
-                              </div>
+                              <div className="text-gray-400">No image submitted</div>
                             )}
                           </div>
                         </div>

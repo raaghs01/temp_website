@@ -9,6 +9,8 @@ export interface User {
   rank_position: number;
   current_day: number;
   total_referrals: number;
+  registration_date: string;
+  status?: string;
 }
 
 export interface Ambassador {

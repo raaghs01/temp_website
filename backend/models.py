@@ -1,4 +1,5 @@
 from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, ForeignKey, JSON, Float
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -9,7 +10,7 @@ Base = declarative_base()
 class User(Base):
     __tablename__ = "users"
     
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String, unique=True, nullable=False, index=True)
     password_hash = Column(String, nullable=False)
     name = Column(String, nullable=False)
@@ -40,8 +41,8 @@ class User(Base):
 class SubmissionFile(Base):
     __tablename__ = "submission_files"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    submission_id = Column(String, ForeignKey("submissions.id"), nullable=False, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    submission_id = Column(UUID(as_uuid=True), ForeignKey("submissions.id"), nullable=False, index=True)
     file_url = Column(Text, nullable=False)
     file_type = Column(String, nullable=True)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
@@ -51,7 +52,7 @@ class SubmissionFile(Base):
 class Task(Base):
     __tablename__ = "tasks"
     
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     day = Column(Integer, nullable=False, index=True)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=False)
@@ -74,9 +75,9 @@ class Task(Base):
 class Submission(Base):
     __tablename__ = "submissions"
     
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    task_id = Column(String, ForeignKey("tasks.id"), nullable=False, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id"), nullable=False, index=True)
     day = Column(Integer, nullable=False)
     
     # Submission content
@@ -107,8 +108,8 @@ class Submission(Base):
 class Analytics(Base):
     __tablename__ = "analytics"
     
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     date = Column(DateTime, default=datetime.utcnow, index=True)
     
     # Daily metrics

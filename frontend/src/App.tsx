@@ -39,7 +39,7 @@ import * as Admin from '@/components/admin';
 // Role-based sidebar imports handled below
 import { User } from '@/types';
 
-const BACKEND_URL = 'http://127.0.0.1:5000';
+const BACKEND_URL = 'http://127.0.0.1:5001';
 const API = `${BACKEND_URL}/api`;
 
 // Debug logging
@@ -582,7 +582,7 @@ const Dashboard: React.FC = () => {
         case 'dashboard':
           return <Ambassador.Dashboard user={user} refreshUser={refreshUser} />;
         case 'tasks':
-          return <Ambassador.Tasks refreshUser={refreshUser} />;
+          return <Ambassador.Tasks refreshUser={refreshUser} user={user} />;
         case 'leaderboard':
           return <Ambassador.Leaderboard user={user} />;
         // case 'community':

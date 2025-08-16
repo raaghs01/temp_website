@@ -4,8 +4,9 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle, Clock, FileText, Image as ImageIcon, Send, Star, Lock, Users, ArrowLeft, Download, X, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import { useTheme } from '@/App';
+import { User } from '@/types';
 
-const BACKEND_URL = 'http://127.0.0.1:5000';
+const BACKEND_URL = 'http://127.0.0.1:5001';
 
 interface Task {
   id: string;
@@ -28,7 +29,7 @@ interface Submission {
   peopleConnected?: number;
 }
 
-const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser }) => {
+const Tasks: React.FC<{ refreshUser?: () => Promise<void>; user?: User | null }> = ({ refreshUser, user }) => {
   const { theme } = useTheme();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -48,6 +49,23 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
     days_since_registration: 1
   });
 
+  // Get user registration date from user profile instead of localStorage
+  const getUserRegistrationDate = () => {
+    // Try to get from user profile first (most accurate)
+    if (user?.registration_date) {
+      return new Date(user.registration_date);
+    }
+    
+    // Fallback to localStorage if user profile not available
+    const storedDate = localStorage.getItem('userRegistrationDate');
+    if (storedDate) {
+      return new Date(storedDate);
+    }
+    
+    // Final fallback to current date
+    return new Date();
+  };
+
   const fetchTasks = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -57,6 +75,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
       }
 
       console.log('Fetching tasks...');
+      console.log('User registration date:', user?.registration_date);
 
       // Fetch ALL tasks (available + completed + locked)
       const allTasksResponse = await fetch(`${BACKEND_URL}/api/all-tasks`, {
@@ -72,6 +91,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
 
       const allTasksData = await allTasksResponse.json();
       console.log('All tasks data:', allTasksData);
+      console.log('Available tasks:', allTasksData.filter((t: Task) => t.status === 'available'));
       
       setTasks(allTasksData);
 
@@ -119,9 +139,9 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
   }, []);
 
   // Group tasks by status and day
-  const availableTasks = tasks.filter(task => task.status === 'available');
-  const completedTasks = tasks.filter(task => task.status === 'completed');
-  const lockedTasks = tasks.filter(task => task.status === 'locked');
+  const availableTasks = tasks.filter((task: Task) => task.status === 'available');
+  const completedTasks = tasks.filter((task: Task) => task.status === 'completed');
+  const lockedTasks = tasks.filter((task: Task) => task.status === 'locked');
 
   // Sort tasks by day
   const sortedAvailableTasks = availableTasks.sort((a, b) => a.day - b.day);
@@ -182,6 +202,10 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
       return;
     }
 
+    console.log('Submitting task:', selectedTask);
+    console.log('User registration date:', user?.registration_date);
+    console.log('Current day should be:', user?.current_day);
+
     setSubmitting(true);
     try {
       const token = localStorage.getItem('token');
@@ -200,14 +224,22 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
         formData.append('files', file);
       });
 
+      console.log('Sending request to:', `${BACKEND_URL}/api/submit-task-with-files`);
+      console.log('Task ID:', selectedTask.id);
+      console.log('Task Day:', selectedTask.day);
+
       const response = await fetch(`${BACKEND_URL}/api/submit-task-with-files`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData,
       });
 
+      console.log('Response status:', response.status);
+      const responseText = await response.text();
+      console.log('Response text:', responseText);
+
       if (response.ok) {
-        const result = await response.json();
+        const result = JSON.parse(responseText);
         
         // Refresh tasks after successful submission
         await fetchTasks();
@@ -222,6 +254,7 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
         const filesText = filesCount > 1 ? ` with ${filesCount} files` : ' with 1 file';
         alert(`Task submitted successfully${filesText}! You earned ${result.points_earned || selectedTask.points} points.`);
       } else {
+        console.error('Submission failed:', responseText);
         let errorMessage = 'Please try again.';
         try {
           const errorData = await response.json();
@@ -236,6 +269,43 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
       alert('Error submitting task. Please try again.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleMarkOrientationAsRead = async (task: Task) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert('Authentication required. Please log in again.');
+        return;
+      }
+
+      console.log('Marking orientation as read for task:', { id: task.id, title: task.title, day: task.day });
+
+      // For Day 0 orientation, submit with minimal data
+      const formData = new FormData();
+      formData.append('task_id', task.id);
+      formData.append('status_text', 'Orientation completed - marked as read');
+      formData.append('people_connected', '0');
+
+      const response = await fetch(`${BACKEND_URL}/api/submit-task-with-files`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        await fetchTasks(); // Refresh tasks
+        if (refreshUser) await refreshUser(); // Refresh user data
+        alert(`Orientation completed! You earned ${result.points_earned || task.points} points.`);
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to mark orientation as read: ${errorData.detail || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error marking orientation as read:', error);
+      alert('Error marking orientation as read. Please try again.');
     }
   };
 
@@ -408,10 +478,15 @@ const Tasks: React.FC<{ refreshUser?: () => Promise<void> }> = ({ refreshUser })
           onClose={() => setShowOrientationVideo(false)}
           onComplete={() => {
             setShowOrientationVideo(false);
-            // Find the orientation task and set it as selected for submission
-            const orientationTask = tasks.find(t => t.title === 'Complete Orientation' && t.status === 'available');
+            // For Day 0 orientation, directly mark as completed without submission modal
+            console.log('Looking for orientation task in:', tasks.map((t: Task) => ({ title: t.title, day: t.day, status: t.status, id: t.id })));
+            const orientationTask = tasks.find((t: Task) => t.day === 0 && t.status === 'available');
+            console.log('Found orientation task:', orientationTask);
             if (orientationTask) {
-              setSelectedTask(orientationTask);
+              handleMarkOrientationAsRead(orientationTask);
+            } else {
+              console.error('No Day 0 orientation task found!');
+              alert('Error: Could not find orientation task to complete.');
             }
           }}
           theme={theme}
@@ -730,7 +805,7 @@ const OrientationVideoModal: React.FC<{
             onClick={onComplete}
             className="flex-1"
           >
-            Complete Orientation & Submit Task
+            Mark as Read
           </Button>
         </div>
       </div>
